@@ -345,20 +345,22 @@ let rec pp_print_nusmv_term ppf term =
     
      | [ ] -> ()
 
-     | _ -> ()
-
-        (*!!
+     | _ -> 
         Format.fprintf 
         ppf 
         "invalid term 1 %a" 
-        Term.pp_print_term term; 
-        assert false;
-        !!*)
+        Term.pp_print_term term
+        (*!!assert false;!!*)
+        
     );
 
   | Term.T.Const s -> pp_print_nusmv_symbol ppf s
 
-  | Term.T.Var v -> pp_print_nusmv_var (Var.offset_of_state_var_instance v) ppf term
+  | Term.T.Var v -> 
+    try 
+      pp_print_nusmv_var (Var.offset_of_state_var_instance v) ppf term
+    with _ -> 
+      Var.print_var v
 
 
 
@@ -393,13 +395,11 @@ let rec pp_print_nusmv_init ppf init =
         
         pp_print_nusmv_init ppf tl
 
-      | _ -> ()
-
-        (*!! Format.fprintf 
+      | _ -> Format.fprintf 
         ppf 
         "invalid term 2 %a" 
         Term.pp_print_term h
-        assert false !!*)
+        (*!!assert false!!*)
 
 
 
@@ -422,13 +422,12 @@ let rec pp_print_nusmv_constr ppf constr =
         
         pp_print_nusmv_constr ppf tl
 
-      | _ -> ()
-        (*!!
+      | _ -> 
         Format.fprintf 
         ppf 
         "invalid term 3 %a" 
         Term.pp_print_term h
-        assert false !!*)
+        (*!! assert false !!*)
 
 
 
