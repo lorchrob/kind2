@@ -74,6 +74,8 @@ let rec pp_print_nusmv_type_node ppf = function
   | Type.Int -> pp_print_nusmv_type ppf 
                 (Type.mk_int_range ( Numeral.of_int !int_lowerbound) 
                                    ( Numeral.of_int !int_upperbound));
+
+  | Type.Real -> Format.fprintf ppf "real"                               
   
   | Type.IntRange (i, j, _) -> 
     Format.fprintf
@@ -241,13 +243,21 @@ let rec pp_print_nusmv_term ppf term =
   
       | [] -> ()
   
-      | h::[] ->
+      | [h] ->
         Format.fprintf 
           ppf 
           "%a"
           (* lhs *)
           pp_print_nusmv_term h
   
+      | h::t::[] ->
+        Format.fprintf 
+          ppf 
+          "%a <= %a"
+          (* lhs *)
+          pp_print_nusmv_term h
+          (* rhs *)
+          pp_print_nusmv_term t 
       | h::t ->
         Format.fprintf 
           ppf 
@@ -269,7 +279,16 @@ let rec pp_print_nusmv_term ppf term =
           ppf 
           "%a"
           pp_print_nusmv_term h
-      
+
+      | h::t::[] ->
+        Format.fprintf 
+          ppf 
+          "%a >= %a"
+          (* lhs *)
+          pp_print_nusmv_term h
+          (* rhs *)
+          pp_print_nusmv_term t 
+
       | h::t ->
         Format.fprintf 
           ppf 
@@ -337,9 +356,9 @@ let rec pp_print_nusmv_term ppf term =
         !!*)
     );
 
-  | Term.T.Var v -> pp_print_nusmv_var (Var.offset_of_state_var_instance v) ppf term
-
   | Term.T.Const s -> pp_print_nusmv_symbol ppf s
+
+  | Term.T.Var v -> pp_print_nusmv_var (Var.offset_of_state_var_instance v) ppf term
 
 
 

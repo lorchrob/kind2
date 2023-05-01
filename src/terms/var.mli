@@ -29,6 +29,18 @@
 (** Hashconsed variable *)
 type t
 
+type var = 
+
+  (* Variable is an instance of a state variable *)
+  | StateVarInstance of StateVar.t * Numeral.t
+
+  (* Variable is a constant state variable *)
+  | ConstStateVar of StateVar.t
+
+  (* Free variable to be bound to in a let expression or by a
+     quantifier *)
+  | FreeVar of HString.t * Type.t
+
 
 (** {1 Hashtables, maps and sets} *)
 
