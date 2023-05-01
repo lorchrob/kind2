@@ -116,10 +116,10 @@ and pp_print_nusmv_type ppf t =
 let pp_print_nusmv_var ofs ppf term =
 
   match Term.destruct term with 
-    | Term.T.Var v when ofs = (Numeral.of_int 0) ->
+    | Term.T.Var v when Numeral.equal ofs (Numeral.of_int 0) ->
       StateVar.pp_print_state_var ppf (Var.state_var_of_state_var_instance v)
 
-    | Term.T.Var v when ofs = (Numeral.of_int 1) ->
+    | Term.T.Var v when Numeral.equal ofs (Numeral.of_int 1) ->
       Format.fprintf
       ppf 
       "next(%a)"
@@ -326,13 +326,15 @@ let rec pp_print_nusmv_term ppf term =
     
      | [ ] -> ()
 
-     | _ -> 
+     | _ -> ()
 
+        (*!!
         Format.fprintf 
         ppf 
-        "invalid term %a" 
+        "invalid term 1 %a" 
         Term.pp_print_term term; 
         assert false;
+        !!*)
     );
 
   | Term.T.Var v -> pp_print_nusmv_var (Var.offset_of_state_var_instance v) ppf term
@@ -360,11 +362,11 @@ let rec pp_print_nusmv_init ppf init =
     (*print_endline ("printing init: " ^ (Term.string_of_term h));*)
     match Term.destruct h with 
       
-      | Term.T.App (s, l) when s == Symbol.s_and -> 
+      | Term.T.App (s, l) when Symbol.equal_symbols s Symbol.s_and -> 
         (*print_endline "and call";*)
         pp_print_nusmv_init ppf ((List.map Term.mk_term (List.map Term.node_of_term l)) @ tl)
 
-      | Term.T.App (s, [l; r]) when (s = Symbol.mk_symbol `EQ) -> 
+      | Term.T.App (s, [l; r]) when Symbol.equal_symbols s (Symbol.mk_symbol `EQ) -> 
 
         Format.fprintf ppf "\tinit(%a) := %a;\n" 
           (pp_print_nusmv_var (Numeral.of_int 0)) (Term.mk_term (Term.node_of_term l)) 
@@ -372,13 +374,13 @@ let rec pp_print_nusmv_init ppf init =
         
         pp_print_nusmv_init ppf tl
 
-      | _ -> 
+      | _ -> ()
 
-        Format.fprintf 
+        (*!! Format.fprintf 
         ppf 
-        "invalid term %a" 
-        Term.pp_print_term h; 
-        assert false
+        "invalid term 2 %a" 
+        Term.pp_print_term h
+        assert false !!*)
 
 
 
@@ -391,23 +393,23 @@ let rec pp_print_nusmv_constr ppf constr =
     (*print_endline ("printing next: " ^ (Term.string_of_term h));*)
     match Term.destruct h with 
       
-      | Term.T.App (s, l) when s == Symbol.s_and -> 
+      | Term.T.App (s, l) when Symbol.equal_symbols s Symbol.s_and -> 
         pp_print_nusmv_constr ppf ((List.map Term.mk_term (List.map Term.node_of_term l)) @ tl)
 
-      | Term.T.App (s, [l; r]) when s == (Symbol.mk_symbol `EQ) -> 
+      | Term.T.App (s, [l; r]) when Symbol.equal_symbols s (Symbol.mk_symbol `EQ) -> 
         Format.fprintf ppf "\tnext(%a) := %a;\n" 
           (pp_print_nusmv_var (Numeral.of_int 0)) (Term.mk_term (Term.node_of_term l)) 
           pp_print_nusmv_term (Term.mk_term (Term.node_of_term r));
         
         pp_print_nusmv_constr ppf tl
 
-      | _ -> 
-
+      | _ -> ()
+        (*!!
         Format.fprintf 
         ppf 
-        "invalid term %a" 
-        Term.pp_print_term h; 
-        assert false
+        "invalid term 3 %a" 
+        Term.pp_print_term h
+        assert false !!*)
 
 
 

@@ -2357,6 +2357,9 @@ let rec trans_sys_of_node'
               mode_requires
               node_assumptions
           in
+
+          Nusmv.pp_print_nusmv_trans_sys Format.std_formatter trans_sys;
+
           trans_sys_of_node'
             options
             globals
