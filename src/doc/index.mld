@@ -261,6 +261,7 @@ Source files live in subdirectory [SMTSolver]
   Version
   Unroller
   JkindParser
+  Nusmv
 }
 
 {1:howto Howto}

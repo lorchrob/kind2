@@ -55,10 +55,126 @@ val trans_base : Numeral.t
     subtract one for the offset of the previous state variables *)
 val prop_base : Numeral.t
 
+type instance = 
+  {
+
+    (* Position as a unique identifier of the instance *)
+    pos : Lib.position;
+
+    (* Map from state variables of the called system to the state variables of
+       the this system *)
+    map_down : StateVar.t StateVar.StateVarMap.t;
+
+    (* Map from the state variables of this system to the state
+       variables of the instance *)
+    map_up : StateVar.t StateVar.StateVarMap.t;
+
+    (* Add a guard to the Boolean term such that it is true if the
+       clock of the node instance is false *)
+    guard_clock : Numeral.t -> Term.t -> Term.t;
+
+    (* [None] if there is no assumption associated to the call. Otherwise,
+       [Some (l,s)] where [l] is the list of instantiated assume terms, and
+       [s] is SoFar(conjunction of instantiated assume terms) *)
+    assumes: (Term.t list * Term.t) option;
+  }
+
 (** The transition system 
 
     Constructed with the function {!mk_trans_sys} *)
-type t
+    type t = { 
+  
+      scope: Scope.t;
+      (** Scope of transition system *)
+  
+      ctr_state_var : StateVar.t option;
+      (** State variable corresponding to the internal counter generated
+          for reachability queries. Should be 'None' if there are no reachability
+          queries. *)
+  
+      init_flag_state_var : StateVar.t;
+      (** State variable that becomes true in the first instant and false
+         again in the second and all following instants *)
+  
+      (* instance_state_var : StateVar.t option; *)
+      (* * State variable to be bound to a unique term for each
+         instance of the transition system *)
+  
+      instance_var_bindings : (Var.t * Term.t) list;
+      (** Assignments of unique terms to the instance variables of this
+         transition system and its subsystems *)
+  
+      (* global_state_vars : (StateVar.t * Term.t list) list; *)
+      (* * State variables of global scope, used for arrays. Each state
+         variable has a list of upper bounds for its indexes. 
+  
+         To get all defined values, evaluate the instance state
+         variable, and the terms for the index bounds first, then
+         evaluate the uninterpreted function with the value of the
+         instance variable as the first, and all indexes as following
+         parameters. TODO: add this functionality to Eval. *)
+  
+      global_consts : Var.t list;
+      (** List of global free constants *)
+      
+      state_vars : StateVar.t list;
+      (** State variables in the scope of this transition system 
+  
+         Also contains [instance_state_var] unless it is None, but not
+         state variables in [global_state_vars]. *)
+  
+      unconstrained_inputs: StateVar.StateVarSet.t;
+      (** Input variables whose value is not constrained by assumptions or asserts *)
+  
+      state_var_bounds : 
+        (LustreExpr.expr LustreExpr.bound_or_fixed list)
+          StateVar.StateVarHashtbl.t;
+      (** register indexes of state variables for later use *)
+  
+      subsystems : (t * instance list) list;
+      (** Transition systems called by this system, and for each instance
+         additional information to map between state variables of the
+         different scopes *)
+  
+      ufs : UfSymbol.t list;
+      (** Other function declarations *)
+      
+      logic : TermLib.logic;
+      (** Logic fragment needed to express the transition system 
+  
+         TODO: Should this go somewhere more global? *)
+  
+      init_uf_symbol : UfSymbol.t;
+      (** Predicate symbol for initial state constraint *)
+  
+      init_formals : Var.t list;
+      (** Formal parameters of initial state constraint *)
+  
+      init : Term.t;
+      (** Initial state constraint. *)
+  
+      trans_uf_symbol : UfSymbol.t;
+      (** Predicate symbol for transition relation *)
+  
+      trans_formals : Var.t list;
+      (** Formal parameters of transition relation *)
+  
+      trans : Term.t;
+      (** Transition relation. *)
+  
+      properties : Property.t list;
+      (** Properties to prove invariant for this transition system 
+  
+         Does not need to be mutable, because a Property.t is *)
+  
+      mode_requires: Term.t option * (Scope.t * Term.t) list ;
+      (** Requirements of global and non-global modes for this system (used by
+          test generation).
+          List of [(is_mode_global, mode_name, require_term)]. *)
+  
+      invariants : Invs.t ;
+  
+    }
 
 (** Hash table over transition systems. *)
 module Hashtbl : Hashtbl.S with type key = t
@@ -69,35 +185,6 @@ module Hashtbl : Hashtbl.S with type key = t
     parameters and its definition, to be used in an association
     list. *)
 type pred_def = UfSymbol.t * (Var.t list * Term.t)
-
-(** Instance of a subsystem *)
-type instance = 
-  {
-
-    pos : Lib.position;
-    (** Position as a unique identifier of the instance *)
-
-    map_down : StateVar.t StateVar.StateVarMap.t;
-    (** Map from the state variables of this system to the state
-        variables of the instance *)
-
-    map_up : StateVar.t StateVar.StateVarMap.t;
-    (** Map from state variables of the called system to the state
-        variables of this system *)
-
-    guard_clock : Numeral.t -> Term.t -> Term.t;
-    (** Add a guard to the Boolean term to make it true whenver the
-        the clock of the subsystem instance is false
-
-        [guard_clock t] assumes that [t] is a Boolean term and returns
-        the term [c => t] where [c] is the clock of the subsystem
-        instance. *)
-
-    assumes: (Term.t list * Term.t) option;
-    (** [None] if there is no assumption associated to the call. Otherwise,
-        [Some (l,s)] where [l] is the list of instantiated assume terms, and
-        [s] is SoFar(conjunction of instantiated assume terms) *)
-  }
 
 (** Return [true] if scopes of transition systems are equal *)
 val equal_scope : t -> t -> bool
