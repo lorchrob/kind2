@@ -1,14 +1,20 @@
-val int_lowerbound : int ref
-val int_upperbound : int ref
-val help_message : string
-val pp_print_nusmv_symbol_node : Format.formatter -> Symbol.symbol -> unit
-val pp_print_nusmv_symbol : Format.formatter -> Symbol.t -> unit
-val pp_print_nusmv_type_node : Format.formatter -> Type.kindtype -> unit
-val pp_print_nusmv_type : Format.formatter -> Type.t -> unit
-val pp_print_nusmv_var : Numeral.t -> Format.formatter -> Term.t -> unit
-val pp_print_nusmv_term : Format.formatter -> Term.t -> unit
-val pp_print_nusmv_var_declaration : Format.formatter -> StateVar.t -> unit
-val pp_print_nusmv_init : Format.formatter -> Term.t list -> unit
-val pp_print_nusmv_constr : Format.formatter -> Term.t list -> unit
-val pp_print_nusmv_prop : Format.formatter -> Property.t -> unit
-val pp_print_nusmv_trans_sys : Format.formatter -> TransSys.t -> unit
+(* This file is part of the Kind 2 model checker.
+
+   Copyright (c) 2023 by the Board of Trustees of the University of Iowa
+
+   Licensed under the Apache License, Version 2.0 (the "License"); you
+   may not use this file except in compliance with the License.  You
+   may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0 
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+   implied. See the License for the specific language governing
+   permissions and limitations under the License. 
+*)
+
+(* Translator from Lustre to NuSMV input language *)
+
+val pp_print_nusmv_trans_sys : bool -> Format.formatter -> TransSys.t -> unit

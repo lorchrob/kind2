@@ -180,8 +180,8 @@ let pp_print_state_var_name ppf (n, s) =
   if s = [] then Format.fprintf ppf "%s" n
   else
     Format.fprintf ppf 
-      "%a.%s" 
-      (pp_print_list Format.pp_print_string ".") s
+      "%a-%s" 
+      (pp_print_list Format.pp_print_string "-") s
       n
 
 (* Return a string representation of the name of a state variable *)

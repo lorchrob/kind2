@@ -21,12 +21,16 @@
 
 open Lib
 
-(* NuSMV only supports bounded integers, in range (-2^31, 2^31). 
-  Bounds for this range are specified here. *)
-let int_lowerbound = ref (-1000)
-let int_upperbound = ref   1000
-let help_message = "Usage: \n" ^
-                   "nusmv [--int-lowerbound lb] [--int-upperbound ub] [FILE]" 
+module SVM = StateVar.StateVarMap
+module SVS = StateVar.StateVarSet
+
+let contains s1 s2 =
+  let re = Str.regexp_string s2
+  in
+      try ignore (Str.search_forward re s1 0); true
+      with Not_found -> false
+
+let printed_modules = ref []
 
 (* Pretty-print a symbol in NuSMV format *)
 let rec pp_print_nusmv_symbol_node ppf = function
@@ -71,9 +75,7 @@ let rec pp_print_nusmv_type_node ppf = function
   | Type.Bool -> Format.pp_print_string ppf "boolean"
 
   (* NuSMV only supports bounded integers *)
-  | Type.Int -> pp_print_nusmv_type ppf 
-                (Type.mk_int_range ( Numeral.of_int !int_lowerbound) 
-                                   ( Numeral.of_int !int_upperbound));
+  | Type.Int -> Format.pp_print_string ppf "integer"
 
   | Type.Real -> Format.fprintf ppf "real"                               
   
@@ -111,7 +113,21 @@ let rec pp_print_nusmv_type_node ppf = function
 
 and pp_print_nusmv_type ppf t = 
   pp_print_nusmv_type_node ppf (Type.node_of_type t)
-  
+
+let find_call_in_instance sv { TransSys.map_down = d; TransSys.map_up = u } = 
+  match SVM.find_opt sv u with 
+    | Some sv2 -> StateVar.string_of_state_var sv2 
+    | _ -> match SVM.find_opt sv d with 
+    | Some sv2 -> StateVar.string_of_state_var sv2
+    | _ -> "not_found"
+
+let find_ret_var_from_ss sv instances =
+  List.fold_left (fun acc instance ->
+      if acc = "not_found" then 
+        find_call_in_instance sv instance
+      else 
+        acc
+    ) "not_found" instances
 
 
 (* pretty-print a var *)
@@ -129,6 +145,8 @@ let pp_print_nusmv_var ofs ppf term =
 
     | Term.T.Var _ -> failwith ("Invalid offset " ^ (Numeral.string_of_numeral ofs)) 
 
+    (*!! If printing a node call, include node call parameters !!*)
+
     | _ -> print_endline "\n Error: couldn't print term:\n"; 
            print_endline (Term.string_of_term term); 
            assert false
@@ -136,7 +154,7 @@ let pp_print_nusmv_var ofs ppf term =
 
 
 (* pretty-print a term in nusmv format *)
-let rec pp_print_nusmv_term ppf term =
+let rec pp_print_nusmv_term ss ppf term =
   
   match Term.destruct term with 
 
@@ -150,16 +168,16 @@ let rec pp_print_nusmv_term ppf term =
         Format.fprintf 
           ppf 
           "%a"
-          pp_print_nusmv_term h
+          (pp_print_nusmv_term ss) h
 
       | h::t ->
         Format.fprintf 
           ppf 
           "%a + %a"
           (* lhs *)
-          pp_print_nusmv_term h
+          (pp_print_nusmv_term ss) h
           (* rhs *)
-          pp_print_nusmv_term (Term.mk_plus t) 
+          (pp_print_nusmv_term ss) (Term.mk_plus t) 
     );
 
   | Term.T.App (s, l) when s = (Symbol.mk_symbol `AND) ->
@@ -170,20 +188,20 @@ let rec pp_print_nusmv_term ppf term =
         Format.fprintf
           ppf
           "%a"
-          pp_print_nusmv_term (Term.mk_false ())
+          (pp_print_nusmv_term ss) (Term.mk_false ())
    
       | [t] ->
         Format.fprintf 
           ppf 
           "%a"
-          pp_print_nusmv_term t
+          (pp_print_nusmv_term ss) t
     
       | h::t ->
         Format.fprintf 
           ppf 
           "(%a & %a)"
-          pp_print_nusmv_term (Term.mk_and (List.rev t))
-          pp_print_nusmv_term h);
+          (pp_print_nusmv_term ss) (Term.mk_and (List.rev t))
+          (pp_print_nusmv_term ss) h);
 
    | Term.T.App (s, l) when s = (Symbol.mk_symbol `OR) ->
 
@@ -193,22 +211,22 @@ let rec pp_print_nusmv_term ppf term =
         Format.fprintf
           ppf
           "%a"
-          pp_print_nusmv_term (Term.mk_false ())
+          (pp_print_nusmv_term ss) (Term.mk_false ())
     
       | [t] ->
         Format.fprintf 
           ppf 
           "%a"
-          pp_print_nusmv_term t
+          (pp_print_nusmv_term ss) t
       
       | h::t ->
         Format.fprintf 
           ppf 
           "(%a | %a)"
           (* lhs *)
-          pp_print_nusmv_term h
+          (pp_print_nusmv_term ss) h
           (* rhs *)
-          pp_print_nusmv_term (Term.mk_or t));
+          (pp_print_nusmv_term ss) (Term.mk_or t));
 
   | Term.T.App (s, l) when s = (Symbol.mk_symbol `IMPLIES) ->
     
@@ -218,23 +236,23 @@ let rec pp_print_nusmv_term ppf term =
           ppf
           "%a"
           (* Implication is a disjunction, empty implication is false *)
-          pp_print_nusmv_term (Term.mk_false ())
+          (pp_print_nusmv_term ss) (Term.mk_false ())
  
       | [t] ->
         Format.fprintf 
           ppf 
           "%a"
           (* An implication without premises is true if the conclusion is true *)
-          pp_print_nusmv_term t
+          (pp_print_nusmv_term ss) t
 
       | h::t ->
         Format.fprintf 
           ppf 
           "(%a -> %a)"
           (* lhs *)
-          pp_print_nusmv_term h
+          (pp_print_nusmv_term ss) h
           (* rhs *)
-          pp_print_nusmv_term (Term.mk_implies t) 
+          (pp_print_nusmv_term ss) (Term.mk_implies t) 
     );
 
   | Term.T.App (s, l) when s = (Symbol.mk_symbol `LEQ) ->
@@ -248,24 +266,24 @@ let rec pp_print_nusmv_term ppf term =
           ppf 
           "%a"
           (* lhs *)
-          pp_print_nusmv_term h
+          (pp_print_nusmv_term ss) h
   
       | h::t::[] ->
         Format.fprintf 
           ppf 
           "%a <= %a"
           (* lhs *)
-          pp_print_nusmv_term h
+          (pp_print_nusmv_term ss) h
           (* rhs *)
-          pp_print_nusmv_term t 
+          (pp_print_nusmv_term ss) t 
       | h::t ->
         Format.fprintf 
           ppf 
           "%a <= %a"
           (* lhs *)
-          pp_print_nusmv_term h
+          (pp_print_nusmv_term ss) h
           (* rhs *)
-          pp_print_nusmv_term (Term.mk_leq t) 
+          (pp_print_nusmv_term ss) (Term.mk_leq t) 
     );
 
   | Term.T.App (s, l) when s = (Symbol.mk_symbol `GEQ) ->
@@ -278,25 +296,25 @@ let rec pp_print_nusmv_term ppf term =
         Format.fprintf 
           ppf 
           "%a"
-          pp_print_nusmv_term h
+          (pp_print_nusmv_term ss) h
 
       | h::t::[] ->
         Format.fprintf 
           ppf 
           "%a >= %a"
           (* lhs *)
-          pp_print_nusmv_term h
+          (pp_print_nusmv_term ss) h
           (* rhs *)
-          pp_print_nusmv_term t 
+          (pp_print_nusmv_term ss) t 
 
       | h::t ->
         Format.fprintf 
           ppf 
           "%a >= %a"
           (* lhs *)
-          pp_print_nusmv_term h
+          (pp_print_nusmv_term ss) h
           (* rhs *)
-          pp_print_nusmv_term (Term.mk_leq t) 
+          (pp_print_nusmv_term ss) (Term.mk_leq t) 
     );
 
   | Term.T.App (s, l) -> 
@@ -312,11 +330,11 @@ let rec pp_print_nusmv_term ppf term =
           ppf 
           "(%a ? %a : %a)"
           (* condition *)
-          pp_print_nusmv_term cond
+          (pp_print_nusmv_term ss) cond
           (* consequent *)
-          pp_print_nusmv_term cons
+          (pp_print_nusmv_term ss) cons
           (* alternative *) 
-          pp_print_nusmv_term alt
+          (pp_print_nusmv_term ss) alt
          
          | s ->
 
@@ -333,48 +351,88 @@ let rec pp_print_nusmv_term ppf term =
         ppf 
         "(%a %a %a)" 
         (* print left hand side *)
-        pp_print_nusmv_term lhs
+        (pp_print_nusmv_term ss) lhs
         (* print symbol *)
         pp_print_nusmv_symbol s 
         (* print right hand side *)
-        pp_print_nusmv_term rhs
+        (pp_print_nusmv_term ss) rhs
 
      | [t] -> 
         pp_print_nusmv_symbol ppf s;
-        pp_print_nusmv_term ppf t
+        (pp_print_nusmv_term ss) ppf t
     
      | [ ] -> ()
 
-     | _ -> 
-        Format.fprintf 
+     | _ -> ()
+        (*Format.fprintf 
         ppf 
         "invalid term 1 %a" 
         Term.pp_print_term term
-        (*!!assert false;!!*)
+        (*assert false;*)*)
         
     );
 
   | Term.T.Const s -> pp_print_nusmv_symbol ppf s
 
+  (*!! If the variable is a node call value, include node call return variable with dot notation !!*)
+  | Term.T.Var v when Var.is_state_var_instance v && contains ( Var.string_of_var v) "call_" -> 
+    let sv = Var.state_var_of_state_var_instance v in
+    let instances = List.map snd ss |> List.flatten in
+    let node_call_variable = find_ret_var_from_ss sv instances in
+    let str = StateVar.string_of_state_var sv in
+    Format.fprintf ppf "%s" (String.concat "." [str; node_call_variable])
+
   | Term.T.Var v -> 
-    try 
+    if Var.is_state_var_instance v then  
       pp_print_nusmv_var (Var.offset_of_state_var_instance v) ppf term
-    with _ -> 
+    else
       Var.print_var v
 
 
+(* Pretty-print a scope *)
+let pp_print_scope ppf s =
+  Format.fprintf 
+    ppf
+    "%a"
+    (pp_print_list Ident.pp_print_ident "-")
+    s
 
+let gather_node_args_from_instance sv u = 
+  let pairs = SVM.bindings u in 
+  let svs = List.map snd pairs |> List.filter (fun sv2 -> sv2 <> sv) in
+  let node_name = StateVar.string_of_state_var (fst (List.hd pairs)) in
+  let node_name = List.hd (String.split_on_char '-' node_name) in
+  let strings = List.map StateVar.string_of_state_var svs |> 
+                List.filter (fun str -> not (contains str "inst_")) in
+  node_name ^ "(" ^ (String.concat ", " strings) ^ ")"
 
-let pp_print_nusmv_var_declaration ppf sv =
+let nusmv_call_str ss sv = 
+    let instances = List.map snd ss |> List.flatten in
+    List.fold_left (fun acc { TransSys.map_up = u; TransSys.map_down = d; } -> 
+      match SVM.find_opt sv u with 
+        | Some _ -> gather_node_args_from_instance sv u
+        | None -> match SVM.find_opt sv d with 
+        | Some _ -> gather_node_args_from_instance sv u
+        | None -> acc 
+    ) "" instances
+
+let pp_print_nusmv_var_declaration ss ppf sv =
+  (*!! If sv is a node call, print the call instead of the type !!*)
+  if not (contains (StateVar.string_of_state_var sv) "call_") then  
   Format.fprintf 
     ppf 
-    "\t%a : %a;\n" 
+    "\t%a : %a;" 
     StateVar.pp_print_state_var sv
-    pp_print_nusmv_type (StateVar.type_of_state_var sv)
+    pp_print_nusmv_type (StateVar.type_of_state_var sv);
+  
+  if (contains (StateVar.string_of_state_var sv) "call_") then
+    Format.fprintf 
+    ppf 
+    "\t%a : %s;" 
+    StateVar.pp_print_state_var sv
+    (nusmv_call_str ss sv)
 
-
-
-let rec pp_print_nusmv_init ppf init = 
+let rec pp_print_nusmv_init ss ppf init = 
   match init with 
 
   | [] -> ()
@@ -385,25 +443,45 @@ let rec pp_print_nusmv_init ppf init =
       
       | Term.T.App (s, l) when Symbol.equal_symbols s Symbol.s_and -> 
         (*print_endline "and call";*)
-        pp_print_nusmv_init ppf ((List.map Term.mk_term (List.map Term.node_of_term l)) @ tl)
+        (pp_print_nusmv_init ss) ppf ((List.map Term.mk_term (List.map Term.node_of_term l)) @ tl)
 
       | Term.T.App (s, [l; r]) when Symbol.equal_symbols s (Symbol.mk_symbol `EQ) -> 
 
         Format.fprintf ppf "\tinit(%a) := %a;\n" 
           (pp_print_nusmv_var (Numeral.of_int 0)) (Term.mk_term (Term.node_of_term l)) 
-          pp_print_nusmv_term (Term.mk_term (Term.node_of_term r));
+          (pp_print_nusmv_term ss) (Term.mk_term (Term.node_of_term r));
         
-        pp_print_nusmv_init ppf tl
+        (pp_print_nusmv_init ss) ppf tl
 
-      | _ -> Format.fprintf 
+      | Term.T.App (s, [l]) when Symbol.equal_symbols s (Symbol.mk_symbol `NOT) -> 
+
+          Format.fprintf ppf "\tinit(%a) := %s;\n" 
+            (pp_print_nusmv_var (Numeral.of_int 0)) (Term.mk_term (Term.node_of_term l)) 
+            "FALSE";
+          
+          (pp_print_nusmv_init ss) ppf tl
+
+      | Term.T.Var v when Var.type_of_var v == Type.t_bool -> 
+        let var_str = (List.hd (String.split_on_char '@' (Var.string_of_var v))) in
+        if (String.ends_with ~suffix:"init_flag" var_str) then
+        Format.fprintf ppf "\tinit(%s) := %s;\n" 
+        var_str
+        "TRUE";
+
+        (pp_print_nusmv_init ss) ppf tl
+
+      | _ when (String.starts_with ~prefix:"(__node_" (Term.string_of_term h)) -> ()
+
+      | _ -> ()
+        (*Format.fprintf 
         ppf 
-        "invalid term 2 %a" 
+        "-- invalid term 2 %a" 
         Term.pp_print_term h
-        (*!!assert false!!*)
+        assert false*)
 
 
 
-let rec pp_print_nusmv_constr ppf constr = 
+let rec pp_print_nusmv_constr ss ppf constr = 
   match constr with 
 
   | [] -> ()
@@ -411,57 +489,87 @@ let rec pp_print_nusmv_constr ppf constr =
   | h :: tl -> 
     (*print_endline ("printing next: " ^ (Term.string_of_term h));*)
     match Term.destruct h with 
-      
       | Term.T.App (s, l) when Symbol.equal_symbols s Symbol.s_and -> 
-        pp_print_nusmv_constr ppf ((List.map Term.mk_term (List.map Term.node_of_term l)) @ tl)
+        (pp_print_nusmv_constr ss) ppf ((List.map Term.mk_term (List.map Term.node_of_term l)) @ tl)
 
       | Term.T.App (s, [l; r]) when Symbol.equal_symbols s (Symbol.mk_symbol `EQ) -> 
         Format.fprintf ppf "\tnext(%a) := %a;\n" 
           (pp_print_nusmv_var (Numeral.of_int 0)) (Term.mk_term (Term.node_of_term l)) 
-          pp_print_nusmv_term (Term.mk_term (Term.node_of_term r));
+          (pp_print_nusmv_term ss) (Term.mk_term (Term.node_of_term r));
         
-        pp_print_nusmv_constr ppf tl
+        (pp_print_nusmv_constr ss) ppf tl
 
-      | _ -> 
-        Format.fprintf 
+      | Term.T.App (s, [l]) when Symbol.equal_symbols s (Symbol.mk_symbol `NOT) -> 
+
+        Format.fprintf ppf "\tnext(%a) := %s;\n" 
+          (pp_print_nusmv_var (Numeral.of_int 0)) (Term.mk_term (Term.node_of_term l)) 
+          "FALSE";
+        
+        (pp_print_nusmv_constr ss) ppf tl
+
+      | Term.T.Var v when Var.type_of_var v == Type.t_bool -> 
+        let var_str = (List.hd (String.split_on_char '@' (Var.string_of_var v))) in
+        if (String.ends_with ~suffix:"init_flag" var_str) then
+        Format.fprintf ppf "\tnext(%s) := %s;\n" 
+        var_str
+        "TRUE";
+
+        (pp_print_nusmv_constr ss) ppf tl
+
+      | _ when (String.starts_with ~prefix:"(__node_" (Term.string_of_term h)) -> ()
+
+      | _ -> ()
+        (*Format.fprintf 
         ppf 
-        "invalid term 3 %a" 
+        "-- invalid term 3 %a" 
         Term.pp_print_term h
-        (*!! assert false !!*)
+        assert false*)
 
 
 
-let pp_print_nusmv_prop ppf {Property.prop_term = t;} =
+let pp_print_nusmv_prop ss ppf {Property.prop_term = t;} =
   (*print_endline (Term.string_of_term t);*)
   Format.fprintf
   ppf
   "@[<hv 1>(%a)@]"
-  pp_print_nusmv_term t
+  (pp_print_nusmv_term ss) t
 
 
-let pp_print_nusmv_trans_sys ppf { TransSys.init = i; 
+let rec pp_print_nusmv_trans_sys first ppf { 
+                                   TransSys.scope = s;
+                                   TransSys.init = i; 
+                                   TransSys.unconstrained_inputs = ui;
+                                   TransSys.state_vars = svs;
                                    (*TransSys.constr = c; *)
                                    TransSys.trans = g; 
                                    TransSys.properties = p;
+                                   TransSys.subsystems = ss;
                                    (*TransSys.invariants = pv;*)
                                    (*TransSys.props_invalid = pi*)  
                                    } =
 
-  (* Collect declared state variables *)
-  let v = StateVar.fold (fun v a -> v :: a) [] in
+  List.iter (pp_print_nusmv_trans_sys false ppf) (List.map fst ss);
 
+  if not (List.mem s !printed_modules) then (
   (Format.fprintf 
     ppf
-    "MODULE main\nVAR@\n@[<v>%a@]@\nASSIGN@\n@[<v>%a@]@[<v>%a@]@\n"
-    (pp_print_list pp_print_nusmv_var_declaration "") v
-    pp_print_nusmv_init [i]
-    pp_print_nusmv_constr [g]
+    "\nMODULE %a (%a)\nVAR@\n@[<v>%a@]@\nASSIGN@\n@[<v>%a@]@[<v>%a@]@\n"
+    pp_print_scope s
+    (pp_print_list StateVar.pp_print_state_var ", ") (SVS.elements ui)
+    (pp_print_list (pp_print_nusmv_var_declaration ss) "@ ") (SVS.elements (SVS.diff (SVS.of_list svs) ui))
+    (pp_print_nusmv_init ss) [i]
+    (pp_print_nusmv_constr ss) [g]
   );
-  if (p <> []) then (
+  printed_modules := s :: !printed_modules;
+  if (p <> [] && first) then (
     Format.fprintf
       ppf 
       "LTLSPEC G@\n(@[<v>%a@]);\n"
-      (pp_print_list pp_print_nusmv_prop " & ") p );
+      (pp_print_list (pp_print_nusmv_prop ss) " & ") p 
+    );
+  );
+  
+  
 
 
 

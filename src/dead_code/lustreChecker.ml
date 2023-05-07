@@ -140,7 +140,7 @@ let main () =
         []
     in
 
-    Format.printf "%a@." TransSys.pp_print_trans_sys trans_sys;
+    (*Format.printf "%a@." TransSys.pp_print_trans_sys trans_sys;*)
 
     (* Create solver instance *)
     let solver = 

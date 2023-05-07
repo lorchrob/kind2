@@ -542,6 +542,11 @@ let analyze msg_setup save_results ignore_props stop_if_falsified modules in_sys
       KEvent.log_analysis_start sys param ;
       (* Debug output system. *)
       Debug.parse "%a" TSys.pp_print_trans_sys sys ;
+
+      Format.fprintf Format.std_formatter "PRINTING NUSMV STUFF";
+      Nusmv.pp_print_nusmv_trans_sys true Format.std_formatter sys;
+      (*TSys.pp_print_trans_sys Format.std_formatter sys;*)
+
       (* Issue number of properties. *)
       List.length props |> KEvent.log L_info "%d properties." ;
 
