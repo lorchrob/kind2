@@ -37,6 +37,7 @@ open Lib
 
 (** TSys name formatter. *)
 let fmt_sys = TSys.pp_print_trans_sys_name
+let first = ref true
 
 (* |===| Helpers to run stuff. *)
 
@@ -543,9 +544,11 @@ let analyze msg_setup save_results ignore_props stop_if_falsified modules in_sys
       (* Debug output system. *)
       Debug.parse "%a" TSys.pp_print_trans_sys sys ;
 
-      Format.fprintf Format.std_formatter "PRINTING NUSMV STUFF";
+      if !first then (
       Nusmv.pp_print_nusmv_trans_sys true Format.std_formatter sys;
-      (*TSys.pp_print_trans_sys Format.std_formatter sys;*)
+      TSys.pp_print_trans_sys Format.std_formatter sys;
+      first := false;
+      );
 
       (* Issue number of properties. *)
       List.length props |> KEvent.log L_info "%d properties." ;

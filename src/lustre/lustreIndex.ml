@@ -63,12 +63,12 @@ let pp_print_one_index' db = function
   | true ->
     
     (function ppf -> function 
-       | RecordIndex i -> Format.fprintf ppf ".%s" i
+       | RecordIndex i -> Format.fprintf ppf "-%s" i
        | TupleIndex i -> Format.fprintf ppf "_%d" i
        | ListIndex i -> Format.fprintf ppf "_%d" i
        | ArrayIntIndex i -> Format.fprintf ppf "_%d" i
        | ArrayVarIndex _ ->  Format.fprintf ppf "_X%d" db
-       | AbstractTypeIndex i -> Format.fprintf ppf ".%s" i)
+       | AbstractTypeIndex i -> Format.fprintf ppf "-%s" i)
 
 
 (* Pretty-print a list of single indexes, given the number of previously seen *)
