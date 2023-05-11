@@ -544,12 +544,6 @@ let analyze msg_setup save_results ignore_props stop_if_falsified modules in_sys
       (* Debug output system. *)
       Debug.parse "%a" TSys.pp_print_trans_sys sys ;
 
-      if !first then (
-      Nusmv.pp_print_nusmv_trans_sys true Format.std_formatter sys;
-      (*TSys.pp_print_trans_sys Format.std_formatter sys;*)
-      first := false;
-      );
-
       (* Issue number of properties. *)
       List.length props |> KEvent.log L_info "%d properties." ;
 
@@ -860,8 +854,19 @@ let run in_sys =
         Flags.Smt.set_trace_subdir subdir;
 
         latest_trans_sys := Some sys ;
+
+        if !first then (
+          first := false;
+          let formatter = open_out "/Users/lorchrob/Desktop/out.smv" in
+          let formatter = Format.formatter_of_out_channel formatter in
+          Format.fprintf formatter "%a@." (Nusmv.pp_print_nusmv_trans_sys true) sys;
+          (*TSys.pp_print_trans_sys Format.std_formatter sys;*)
+        );
+  
         (* Analyze... *)
-        analyze msg_setup true false false modules in_sys param sys ;
+        (* analyze msg_setup true false false modules in_sys param sys ;*)
+
+
         (* ...and loop. *)
         loop ac ()
 

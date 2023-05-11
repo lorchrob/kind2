@@ -403,7 +403,15 @@ let rec pp_print_nusmv_term ss ppf term =
     let node_name = List.hd (String.split_on_char '-' node_name) in
     let node_call_variable = find_ret_var_from_ss node_name sv instances in
     let str = StateVar.string_of_state_var sv in
-    Format.fprintf ppf "%s" (String.concat "." [str; node_call_variable])
+    (*!! Need to include offset stuff for node calls !!*)
+
+    let cond = Var.is_state_var_instance v && (Var.offset_of_state_var_instance v) == Numeral.one in
+    if cond then
+      Format.fprintf ppf "next(%s)" (String.concat "." [str; node_call_variable]);
+    if not cond then 
+      Format.fprintf ppf "%s" (String.concat "." [str; node_call_variable]);
+
+
 
   | Term.T.Var v -> 
     if Var.is_state_var_instance v then  
@@ -436,6 +444,7 @@ let gather_node_args_from_instance ss sv u =
     else StateVar.string_of_state_var sv) svs
   in
   let strings = List.filter (fun str -> not (contains str "inst_")) strings in
+  let strings = List.filter (fun str -> not (contains str "poracle")) strings in
   node_name ^ "(" ^ (String.concat ", " strings) ^ ")"
 
 let nusmv_call_str ss sv = 
@@ -558,17 +567,12 @@ let rec pp_print_nusmv_constr ss ppf constr =
         
         (pp_print_nusmv_constr ss) ppf tl
 
-      | Term.T.App (s, [l]) when Symbol.equal_symbols s (Symbol.mk_symbol `NOT) -> 
-
-        Format.fprintf ppf "\tnext(%a) := %s;\n" 
-          (pp_print_nusmv_var (Numeral.of_int 0)) (Term.mk_term (Term.node_of_term l)) 
-          "FALSE";
-        
+      | Term.T.App (s, [_]) when Symbol.equal_symbols s (Symbol.mk_symbol `NOT) -> 
+       ();
         (pp_print_nusmv_constr ss) ppf tl
 
       | Term.T.Var v when contains (Var.string_of_var v) "init_flag" -> 
         ();
-
         (pp_print_nusmv_constr ss) ppf tl
 
       | Term.T.Var v when Var.type_of_var v == Type.t_bool -> ()
@@ -609,6 +613,7 @@ let rec pp_print_nusmv_trans_sys first ppf {
   List.iter (pp_print_nusmv_trans_sys false ppf) (List.map fst ss);
 
   if (not first) && (not (List.mem s !modules_printed)) then (
+    modules_printed := s :: !modules_printed;
   (Format.fprintf 
     ppf
     "\nMODULE %a (%a)\nVAR@\n@[<v>%a@]@\nASSIGN@\n@[<v>%a@]@[<v>%a@]@[<v>%a@]@\n"
@@ -619,10 +624,10 @@ let rec pp_print_nusmv_trans_sys first ppf {
     (pp_print_nusmv_constr ss) [g]
     (pp_print_nusmv_invars ss) [i]
   );
-    modules_printed := s :: !modules_printed;
   );
 
   if first && (not (List.mem s !modules_printed)) then (
+    modules_printed := s :: !modules_printed;
     (Format.fprintf 
       ppf
       "\nMODULE %s () \nVAR@\n@[<v>%a@]@\nASSIGN@\n@[<v>%a@]@[<v>%a@]@[<v>%a@]@\n"
@@ -632,9 +637,6 @@ let rec pp_print_nusmv_trans_sys first ppf {
       (pp_print_nusmv_constr ss) [g]
       (pp_print_nusmv_invars ss) [i]
     );
-
-  modules_printed := s :: !modules_printed;
-
   if (p <> []) then (
     Format.fprintf
       ppf 
