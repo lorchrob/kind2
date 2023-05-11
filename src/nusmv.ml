@@ -449,14 +449,20 @@ let nusmv_call_str ss sv =
     ) "" instances
 
 let pp_print_nusmv_var_declaration ss ppf sv =
-  if not (contains (StateVar.string_of_state_var sv) "call_") then  
+  if not (contains (StateVar.string_of_state_var sv) "call_")
+    && not (contains (StateVar.string_of_state_var sv) "res-inst")
+    && not (contains (StateVar.string_of_state_var sv) "init_flag")
+    then  
   Format.fprintf 
     ppf 
     "\t%a : %a;" 
     StateVar.pp_print_state_var sv
     pp_print_nusmv_type (StateVar.type_of_state_var sv);
   (*!! If sv is a node call, print the call instead of the type !!*)
-  if (contains (StateVar.string_of_state_var sv) "call_") then
+  if (contains (StateVar.string_of_state_var sv) "call_") 
+    && not (contains (StateVar.string_of_state_var sv) "res-inst")
+    && not (contains (StateVar.string_of_state_var sv) "init_flag")
+  then
     Format.fprintf 
     ppf 
     "\t%s : %s;" 
@@ -495,7 +501,8 @@ let rec pp_print_nusmv_init ss ppf init =
         (*print_endline "and call";*)
         (pp_print_nusmv_init ss) ppf ((List.map Term.mk_term (List.map Term.node_of_term l)) @ tl)
 
-      | Term.T.App (s, [l; r]) when Symbol.equal_symbols s (Symbol.mk_symbol `EQ) -> 
+      | Term.T.App (s, [l; r]) when Symbol.equal_symbols s (Symbol.mk_symbol `EQ) && 
+                                    not (contains (Term.string_of_term l) "init_flag") -> 
 
         Format.fprintf ppf "\tinit(%a) := %a;\n" 
           (pp_print_nusmv_var (Numeral.of_int 0)) (Term.mk_term (Term.node_of_term l)) 
@@ -512,11 +519,7 @@ let rec pp_print_nusmv_init ss ppf init =
           (pp_print_nusmv_init ss) ppf tl
 
       | Term.T.Var v when contains (Var.string_of_var v) "init_flag" -> 
-        let var_str = (List.hd (String.split_on_char '@' (Var.string_of_var v))) in
-        if (String.ends_with ~suffix:"init_flag" var_str) then
-        Format.fprintf ppf "\tinit(%s) := %s;\n" 
-        var_str
-        "TRUE";
+        ();
 
         (pp_print_nusmv_init ss) ppf tl
 
@@ -547,7 +550,8 @@ let rec pp_print_nusmv_constr ss ppf constr =
       | Term.T.App (s, l) when Symbol.equal_symbols s Symbol.s_and -> 
         (pp_print_nusmv_constr ss) ppf ((List.map Term.mk_term (List.map Term.node_of_term l)) @ tl)
 
-      | Term.T.App (s, [l; r]) when Symbol.equal_symbols s (Symbol.mk_symbol `EQ) -> 
+      | Term.T.App (s, [l; r]) when Symbol.equal_symbols s (Symbol.mk_symbol `EQ) && 
+      not (contains (Term.string_of_term l) "init_flag")-> 
         Format.fprintf ppf "\tnext(%a) := %a;\n" 
           (pp_print_nusmv_var (Numeral.of_int 0)) (Term.mk_term (Term.node_of_term l)) 
           (pp_print_nusmv_term ss) (Term.mk_term (Term.node_of_term r));
@@ -563,11 +567,7 @@ let rec pp_print_nusmv_constr ss ppf constr =
         (pp_print_nusmv_constr ss) ppf tl
 
       | Term.T.Var v when contains (Var.string_of_var v) "init_flag" -> 
-        let var_str = (List.hd (String.split_on_char '@' (Var.string_of_var v))) in
-        if (String.ends_with ~suffix:"init_flag" var_str) then
-        Format.fprintf ppf "\tnext(%s) := %s;\n" 
-        var_str
-        "TRUE";
+        ();
 
         (pp_print_nusmv_constr ss) ppf tl
 
@@ -627,7 +627,7 @@ let rec pp_print_nusmv_trans_sys first ppf {
       ppf
       "\nMODULE %s () \nVAR@\n@[<v>%a@]@\nASSIGN@\n@[<v>%a@]@[<v>%a@]@[<v>%a@]@\n"
       "main"
-      (pp_print_list (pp_print_nusmv_var_declaration ss) "@ ") (SVS.elements (SVS.diff (SVS.of_list svs) ui))
+      (pp_print_list (pp_print_nusmv_var_declaration ss) "@ ") (SVS.elements ((SVS.of_list svs)))
       (pp_print_nusmv_init ss) [i]
       (pp_print_nusmv_constr ss) [g]
       (pp_print_nusmv_invars ss) [i]
@@ -638,7 +638,7 @@ let rec pp_print_nusmv_trans_sys first ppf {
   if (p <> []) then (
     Format.fprintf
       ppf 
-      "LTLSPEC G@\n(@[<v>%a@]);\n"
+      "INVARSPEC @\n(@[<v>%a@]);\n"
       (pp_print_list (pp_print_nusmv_prop ss) " & ") p;
     );
   );

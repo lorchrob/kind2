@@ -546,7 +546,7 @@ let analyze msg_setup save_results ignore_props stop_if_falsified modules in_sys
 
       if !first then (
       Nusmv.pp_print_nusmv_trans_sys true Format.std_formatter sys;
-      TSys.pp_print_trans_sys Format.std_formatter sys;
+      (*TSys.pp_print_trans_sys Format.std_formatter sys;*)
       first := false;
       );
 
