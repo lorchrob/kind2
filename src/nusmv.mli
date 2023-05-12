@@ -17,4 +17,4 @@
 
 (* Translator from Lustre to NuSMV input language *)
 
-val pp_print_nusmv_trans_sys : bool -> Format.formatter -> TransSys.t -> unit
+val pp_print_nusmv_trans_sys : 'a InputSystem.t -> bool -> Format.formatter -> TransSys.t -> unit

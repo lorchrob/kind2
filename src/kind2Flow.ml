@@ -859,8 +859,8 @@ let run in_sys =
           first := false;
           let formatter = open_out "/Users/lorchrob/Desktop/out.smv" in
           let formatter = Format.formatter_of_out_channel formatter in
-          Format.fprintf formatter "%a@." (Nusmv.pp_print_nusmv_trans_sys true) sys;
-          (*TSys.pp_print_trans_sys Format.std_formatter sys;*)
+          (*Format.printf "%a@" TSys.pp_print_trans_sys sys;*)
+          Format.fprintf formatter "%a@." (Nusmv.pp_print_nusmv_trans_sys in_sys true) sys;
         );
   
         (* Analyze... *)
