@@ -70,7 +70,7 @@ let rec pp_print_nusmv_symbol_node ppf = function
   | `MINUS -> Format.pp_print_string ppf "-"
   | `PLUS -> Format.pp_print_string ppf "+"
   | `TIMES -> Format.pp_print_string ppf "*"
-  (*| `DIV -> Format.pp_print_string ppf ""*)
+  | `DIV -> Format.pp_print_string ppf "/"
   | `INTDIV -> Format.pp_print_string ppf "/"
   | `MOD -> Format.pp_print_string ppf "mod"
   (*| `ABS -> Format.pp_print_string ppf ""*)
@@ -434,11 +434,12 @@ let rec pp_print_nusmv_term in_sys ss ppf term =
 
 
 
-  | Term.T.Var v -> 
+  | Term.T.Var v when not (contains (Var.string_of_var v) "res-inst") -> 
     if Var.is_state_var_instance v then  
       pp_print_nusmv_var (Var.offset_of_state_var_instance v) ppf term
     else
       Format.fprintf ppf "%s" (Var.string_of_var v)
+  | _ -> Format.fprintf ppf "TRUE"
 
 
 (* Pretty-print a scope *)
@@ -452,19 +453,18 @@ let pp_print_scope ppf s =
 let gather_node_args_from_instance in_sys ss sv u = 
   let pairs = SVM.bindings u in 
   let svs = List.map snd pairs |> 
-    (*List.filter (fun sv2 -> not (contains (string_of_state_var sv) (string_of_state_var sv2))) in*)
-    (*List.filter (fun sv2 -> sv <> sv2) in*)
+    (* Filter out node arguments that shouldn't be present *)
     List.filter (fun sv2 -> 
       let sv_short =  StateVar.string_of_state_var sv in 
       let sv2_short = StateVar.string_of_state_var sv2 in
       let sv_short1 = 
         if contains sv_short "_" then 
-          sv_short |> String.split_on_char '_' |> List.rev |> List.tl |> List.rev |> String.concat "_" 
+          sv_short |> String.split_on_char '_' |> init |> String.concat "_" 
         else sv_short
       in
       let sv2_short1 = 
         if contains sv2_short "_" then
-          sv2_short |> String.split_on_char '_' |> List.rev |> List.tl |> List.rev |> String.concat "_" 
+          sv2_short |> String.split_on_char '_' |> init |> String.concat "_" 
         else sv2_short
       in
       let cond = 
@@ -474,13 +474,24 @@ let gather_node_args_from_instance in_sys ss sv u =
           not (List.exists (fun word -> contains word "call_" && List.exists (fun word2 -> word2 = word) list2) list1)
         else true
       in
+      let cond2 = 
+        try (
+          (*not (contains sv_short "call_[0-9]+" && contains sv2_short "call_[0-9]+")*)
+          let _ = Str.search_forward (Str.regexp {|call_\([0-9]+\)|}) sv_short 0 in 
+          let call = Str.matched_string sv_short in 
+          let _ = Str.search_forward (Str.regexp {|call_\([0-9]+\)|}) sv2_short 0 in 
+          let call2 = Str.matched_string sv2_short in 
+          call <> call2
+        )
+        with | _ -> true
+      in
       not (
         (contains sv_short1 "call_") &&
         (contains sv2_short1 "call_") &&
         (contains sv_short1 sv2_short1) && 
         (contains sv2_short1 sv_short1)
       ) &&
-      cond &&
+      cond && cond2 &&
       (not (contains (string_of_state_var sv) (string_of_state_var sv2)))
     ) 
   in
