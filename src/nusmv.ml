@@ -358,7 +358,7 @@ let rec pp_print_nusmv_term in_sys ss ppf term =
           (* lhs *)
           (pp_print_nusmv_term in_sys ss) h
           (* rhs *)
-          (pp_print_nusmv_term in_sys ss) (Term.mk_leq t) 
+          (pp_print_nusmv_term in_sys ss) (Term.mk_geq t) 
     );
 
   | Term.T.App (s, l) -> 
