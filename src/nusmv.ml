@@ -682,7 +682,7 @@ let pp_print_nusmv_prop in_sys ss ppf {Property.prop_term = t;} =
 let rec pp_print_nusmv_trans_sys in_sys first ppf { 
                                    TransSys.scope = s;
                                    TransSys.init = i; 
-                                   TransSys.unconstrained_inputs = ui;
+                                   (*TransSys.unconstrained_inputs = ui;*)
                                    TransSys.state_vars = svs;
                                    (*TransSys.constr = c; *)
                                    TransSys.trans = g; 
@@ -695,13 +695,21 @@ let rec pp_print_nusmv_trans_sys in_sys first ppf {
   List.iter (pp_print_nusmv_trans_sys in_sys false ppf) (List.map fst ss);
 
   if (not first) && (not (List.mem s !modules_printed)) then (
+    let node = match InputSystem.get_lustre_node in_sys s with 
+            | Some node -> node 
+            | None -> failwith "oops"
+    in
+    let args = 
+      LustreIndex.values node.inputs
+    in
+    let arg_set = SVS.of_list args in
     modules_printed := s :: !modules_printed;
   (Format.fprintf 
     ppf
     "\nMODULE %a (%a)\nVAR@\n@[<v>%a@]@\nASSIGN@\n@[<v>%a@]@[<v>%a@]@[<v>%a@]@\n"
     pp_print_scope s
-    (pp_print_list StateVar.pp_print_state_var ", ") (SVS.elements ui)
-    (pp_print_nusmv_var_declarations [] in_sys ss) (SVS.elements (SVS.diff (SVS.of_list svs) ui))
+    (pp_print_list StateVar.pp_print_state_var ", ") args
+    (pp_print_nusmv_var_declarations [] in_sys ss) (SVS.elements (SVS.diff (SVS.of_list svs) arg_set))
     (pp_print_nusmv_init in_sys ss) [i]
     (pp_print_nusmv_constr in_sys ss) [g]
     (pp_print_nusmv_invars ss) [i]
