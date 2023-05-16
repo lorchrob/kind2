@@ -53,9 +53,12 @@ let rec pp_print_nusmv_symbol_node ppf = function
 
   | `TRUE -> Format.pp_print_string ppf "TRUE"
   | `FALSE -> Format.pp_print_string ppf "FALSE"
+  | `BVNOT
   | `NOT -> Format.pp_print_string ppf "!"
   | `IMPLIES -> Format.pp_print_string ppf "->"
+  | `BVAND
   | `AND  -> Format.pp_print_string ppf "&"
+  | `BVOR
   | `OR -> Format.pp_print_string ppf "|"
   | `XOR -> Format.pp_print_string ppf "xor"
 
@@ -64,22 +67,31 @@ let rec pp_print_nusmv_symbol_node ppf = function
   (*| `ITE -> Format.pp_print_string ppf "" *)
 
   | `NUMERAL i -> Numeral.pp_print_numeral ppf i
+  | `BV b -> Numeral.pp_print_numeral ppf (Bitvector.bv_to_num b)
+  | `UBV b -> Numeral.pp_print_numeral ppf (Bitvector.ubv_to_num b)
   | `DECIMAL f -> Decimal.pp_print_decimal ppf f
   (*| `BV b -> pp_print_bitvector_b ppf b *)
-
+  | `BVSUB
   | `MINUS -> Format.pp_print_string ppf "-"
+  | `BVADD
   | `PLUS -> Format.pp_print_string ppf "+"
+  | `BVMUL
   | `TIMES -> Format.pp_print_string ppf "*"
-  | `DIV -> Format.pp_print_string ppf "/"
+  | `BVSDIV
+  | `DIV
   | `INTDIV -> Format.pp_print_string ppf "/"
   | `MOD -> Format.pp_print_string ppf "mod"
   (*| `ABS -> Format.pp_print_string ppf ""*)
-
+  | `BVSLE
   | `LEQ -> Format.pp_print_string ppf "<="
+  | `BVSLT
   | `LT -> Format.pp_print_string ppf "<"
+  | `BVSGE
   | `GEQ -> Format.pp_print_string ppf ">="
+  | `BVSGT
   | `GT -> Format.pp_print_string ppf ">"
-  | _ -> Format.pp_print_string ppf "!!"
+  | `TO_INT32 -> ();
+  | _ as s -> Format.fprintf ppf "%s" (Symbol.string_of_symbol_node s)
 
 and pp_print_nusmv_symbol ppf s =
   pp_print_nusmv_symbol_node ppf (Symbol.node_of_symbol s)
@@ -110,7 +122,7 @@ let rec pp_print_nusmv_type_node ppf = function
   | Type.BV 32 -> 
     Format.fprintf
       ppf 
-      "-2147483648 .. 2147483647" 
+      "-1000 .. 1000" 
 
   | Type.Real -> Format.fprintf ppf "real"                               
   
@@ -393,7 +405,7 @@ let rec pp_print_nusmv_term in_sys ss ppf term =
 
         );
 
-      | [lhs; rhs] -> 
+      | [lhs; rhs] when not (Symbol.is_select s) -> 
         Format.fprintf 
         ppf 
         "(%a %a %a)" 
@@ -404,6 +416,15 @@ let rec pp_print_nusmv_term in_sys ss ppf term =
         (* print right hand side *)
         (pp_print_nusmv_term in_sys ss) rhs
 
+      | [lhs; rhs] when (Symbol.is_select s) -> 
+          Format.fprintf 
+          ppf 
+          "(%a[%a])" 
+          (* print left hand side *)
+          (pp_print_nusmv_term in_sys ss) lhs
+          (* print right hand side *)
+          (pp_print_nusmv_term in_sys ss) rhs
+        
      | [t] -> 
         pp_print_nusmv_symbol ppf s;
         (pp_print_nusmv_term in_sys ss) ppf t
