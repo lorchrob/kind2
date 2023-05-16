@@ -105,8 +105,12 @@ let rec pp_print_nusmv_type_node ppf = function
 
   | Type.Bool -> Format.pp_print_string ppf "boolean"
 
-  (* NuSMV only supports bounded integers *)
   | Type.Int -> Format.pp_print_string ppf "integer"
+
+  | Type.BV 32 -> 
+    Format.fprintf
+      ppf 
+      "-2147483648 .. 2147483647" 
 
   | Type.Real -> Format.fprintf ppf "real"                               
   
@@ -593,7 +597,6 @@ let rec pp_print_nusmv_init in_sys ss ppf init =
 
       | Term.T.App (s, [l; r]) when Symbol.equal_symbols s (Symbol.mk_symbol `EQ) && 
                                     not (contains (Term.string_of_term l) "init_flag") -> 
-        let _ = Simplify.simplify_term [] (Term.mk_term (Term.node_of_term r)) in
         (*Format.fprintf ppf "GOT PAST SIMPLIFICATION@.";*)
         Format.fprintf ppf "\tinit(%a) := %a;\n" 
           (pp_print_nusmv_var (Numeral.of_int 0)) (Term.mk_term (Term.node_of_term l)) 
