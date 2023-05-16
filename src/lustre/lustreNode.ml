@@ -1383,7 +1383,7 @@ let stateful_vars_of_node
       (fun a l -> 
          D.fold
            (fun _ sv a ->
-              if 
+              (*if 
                 (* Arrays are global TODO maybe this is not necessary *)
                 not (Type.is_array (StateVar.type_of_state_var sv)) &&
                 (* Local state variable is defined by an equation? *)
@@ -1391,7 +1391,7 @@ let stateful_vars_of_node
                   (fun ((sv', _), _) -> StateVar.equal_state_vars sv sv') 
                   equations 
               then a
-              else 
+              else *)
 
                 (* State variable without equation must be stateful *)
                 SVS.add sv a)

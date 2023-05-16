@@ -535,7 +535,7 @@ let rec pp_print_nusmv_var_declarations decls in_sys ss ppf svs = match svs with
     then (
   Format.fprintf 
     ppf 
-    "\t%a : %a;" 
+    "\t%a : %a;\n" 
     StateVar.pp_print_state_var sv
     pp_print_nusmv_type (StateVar.type_of_state_var sv)
     );
