@@ -718,7 +718,7 @@ let rec pp_print_bitvector_x' ppf = function
 (* Pretty-print a bitvector in hexadecimal format *)
 let pp_print_bitvector_x ppf b = 
   
-  pp_print_string ppf "#X";
+  (*pp_print_string ppf "#X";*)
   
   match (List.length b) mod 4 with 
     | 0 -> pp_print_bitvector_x' ppf b

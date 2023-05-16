@@ -67,7 +67,9 @@ let rec pp_print_nusmv_symbol_node ppf = function
   (*| `ITE -> Format.pp_print_string ppf "" *)
 
   | `NUMERAL i -> Numeral.pp_print_numeral ppf i
-  | `BV b -> Numeral.pp_print_numeral ppf (Bitvector.bv_to_num b)
+  | `BV b -> 
+    Format.fprintf ppf "0sh32_%a" Bitvector.pp_print_bitvector_x b
+
   | `UBV b -> Numeral.pp_print_numeral ppf (Bitvector.ubv_to_num b)
   | `DECIMAL f -> Decimal.pp_print_decimal ppf f
   (*| `BV b -> pp_print_bitvector_b ppf b *)
@@ -122,7 +124,7 @@ let rec pp_print_nusmv_type_node ppf = function
   | Type.BV 32 -> 
     Format.fprintf
       ppf 
-      "-1000 .. 1000" 
+      "signed word[32]" 
 
   | Type.Real -> Format.fprintf ppf "real"                               
   
