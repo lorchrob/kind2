@@ -1393,9 +1393,8 @@ let rec constraints_of_equations_wo_arrays node
   | [] -> terms, lets, eq_bounds
 
   (* Stateful variable must have an equational constraint *)
-  | ((state_var, []), { E.expr_init; E.expr_step }) :: tl 
-    when List.exists (StateVar.equal_state_vars state_var) stateful_vars -> 
-
+  | ((state_var, []), { E.expr_init; E.expr_step }) :: tl ->
+    (*when List.exists (StateVar.equal_state_vars state_var) stateful_vars -> *)
     (* Equation for stateful variable *)
     let def = 
       Term.mk_eq 
@@ -1410,15 +1409,11 @@ let rec constraints_of_equations_wo_arrays node
       (* Convert select operators to uninterpreted functions *)
       |> Term.convert_select
     in
-
     (* Add terms of equation *)
     constraints_of_equations_wo_arrays node
       eq_bounds init stateful_vars (def :: terms) (lets, lets_dependencies) tl
-
-
   (* Can define state variable with a let binding *)
-  | ((state_var, []), ({ E.expr_init; E.expr_step } as expr)) :: tl ->
-
+  (*| ((state_var, []), ({ E.expr_init; E.expr_step } as expr)) :: tl ->
     (*if not (E.is_var expr) then begin*)
       (* We update the let dependencies *)
       let add_dependency sv acc =
@@ -1499,7 +1494,7 @@ let rec constraints_of_equations_wo_arrays node
     (* Start with singleton lists of let-bound terms *)
     constraints_of_equations_wo_arrays node
       eq_bounds init stateful_vars terms (let_closure :: lets, lets_dependencies) tl
-
+*)
   (* Array state variable *)
   | (((_, bounds), _) as eq) :: tl -> 
 

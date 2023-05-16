@@ -199,7 +199,6 @@ let pp_print_nusmv_var ofs ppf term =
 
 (* pretty-print a term in nusmv format *)
 let rec pp_print_nusmv_term in_sys ss ppf term =
-  
   match Term.destruct term with 
 
   | Term.T.App (s, l) when s = (Symbol.mk_symbol `PLUS) ->
@@ -561,7 +560,6 @@ let rec pp_print_nusmv_invars ss ppf init =
   | [] -> ()
 
   | h :: tl -> 
-    
     match Term.destruct h with 
       | Term.T.App (s, l) when Symbol.equal_symbols s Symbol.s_and -> 
       (*print_endline "and call";*)
@@ -595,11 +593,14 @@ let rec pp_print_nusmv_init in_sys ss ppf init =
 
       | Term.T.App (s, [l; r]) when Symbol.equal_symbols s (Symbol.mk_symbol `EQ) && 
                                     not (contains (Term.string_of_term l) "init_flag") -> 
-
+        let _ = Simplify.simplify_term [] (Term.mk_term (Term.node_of_term r)) in
+        (*Format.fprintf ppf "GOT PAST SIMPLIFICATION@.";*)
         Format.fprintf ppf "\tinit(%a) := %a;\n" 
           (pp_print_nusmv_var (Numeral.of_int 0)) (Term.mk_term (Term.node_of_term l)) 
           (pp_print_nusmv_term in_sys ss) (Term.mk_term (Term.node_of_term r));
         
+          
+
         (pp_print_nusmv_init in_sys ss) ppf tl
 
       | Term.T.App (s, [l]) when Symbol.equal_symbols s (Symbol.mk_symbol `NOT) -> 
