@@ -332,7 +332,7 @@ let rec pp_print_nusmv_term in_sys ss ppf term =
       | h::t::[] ->
         Format.fprintf 
           ppf 
-          "%a <= %a"
+          "(%a <= %a)"
           (* lhs *)
           (pp_print_nusmv_term in_sys ss) h
           (* rhs *)
@@ -340,7 +340,7 @@ let rec pp_print_nusmv_term in_sys ss ppf term =
       | h::t ->
         Format.fprintf 
           ppf 
-          "%a <= %a"
+          "(%a <= %a)"
           (* lhs *)
           (pp_print_nusmv_term in_sys ss) h
           (* rhs *)
@@ -362,7 +362,7 @@ let rec pp_print_nusmv_term in_sys ss ppf term =
       | h::t::[] ->
         Format.fprintf 
           ppf 
-          "%a >= %a"
+          "(%a >= %a)"
           (* lhs *)
           (pp_print_nusmv_term in_sys ss) h
           (* rhs *)
@@ -371,7 +371,7 @@ let rec pp_print_nusmv_term in_sys ss ppf term =
       | h::t ->
         Format.fprintf 
           ppf 
-          "%a >= %a"
+          "(%a >= %a)"
           (* lhs *)
           (pp_print_nusmv_term in_sys ss) h
           (* rhs *)
@@ -559,6 +559,7 @@ let rec pp_print_nusmv_var_declarations decls in_sys ss ppf svs = match svs with
   if not (contains (StateVar.string_of_state_var sv) "call_")
     && not (contains (StateVar.string_of_state_var sv) "res-inst")
     && not (contains (StateVar.string_of_state_var sv) "init_flag")
+    && not (contains (StateVar.string_of_state_var sv) "poracle")
     then (
   Format.fprintf 
     ppf 
@@ -572,6 +573,7 @@ let rec pp_print_nusmv_var_declarations decls in_sys ss ppf svs = match svs with
     && not (contains (StateVar.string_of_state_var sv) "res-inst")
     && not (contains (StateVar.string_of_state_var sv) "init_flag")
     && not (List.mem (string_of_call_variable sv) decls)
+    && not (contains (StateVar.string_of_state_var sv) "poracle")
   then (
     Format.fprintf 
     ppf 
