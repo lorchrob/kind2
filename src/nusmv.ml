@@ -757,11 +757,12 @@ let rec pp_print_nusmv_trans_sys in_sys first ppf {
       (pp_print_nusmv_invars ss) [i]
     );
   if (p <> []) then (
+    List.iter (fun prop ->
     Format.fprintf
       ppf 
       "INVARSPEC @\n(@[<v>%a@]);\n"
-      (pp_print_list (pp_print_nusmv_prop in_sys ss) " & ") p;
-    );
+      (pp_print_nusmv_prop in_sys ss) prop;
+    ) p)
   );
 
   first_g := false;
