@@ -534,6 +534,7 @@ let gather_node_args_from_instance in_sys ss sv u =
   in
   let strings = List.filter (fun str -> not (contains str "inst_")) strings in
   let strings = List.filter (fun str -> not (contains str "poracle")) strings in
+  let node_name = (if node_name = "main" then "main2" else node_name) in
   node_name ^ "(" ^ (String.concat ", " strings) ^ ")"
 
 let nusmv_call_str in_sys ss sv = 
@@ -735,10 +736,11 @@ let rec pp_print_nusmv_trans_sys in_sys first ppf {
     in
     let arg_set = SVS.of_list args in
     modules_printed := s :: !modules_printed;
+    let s = (if string_of_t pp_print_scope s = "main" then "main2" else string_of_t pp_print_scope s) in
   (Format.fprintf 
     ppf
-    "\nMODULE %a (%a)\nVAR@\n@[<v>%a@]@\nASSIGN@\n@[<v>%a@]@[<v>%a@]@[<v>%a@]@\n"
-    pp_print_scope s
+    "\nMODULE %s (%a)\nVAR@\n@[<v>%a@]@\nASSIGN@\n@[<v>%a@]@[<v>%a@]@[<v>%a@]@\n"
+    s
     (pp_print_list StateVar.pp_print_state_var ", ") args
     (pp_print_nusmv_var_declarations [] in_sys ss) (SVS.elements (SVS.diff (SVS.of_list svs) arg_set))
     (pp_print_nusmv_init in_sys ss) [i]
@@ -760,7 +762,8 @@ let rec pp_print_nusmv_trans_sys in_sys first ppf {
     );
   if (p <> []) then (
     List.iter (fun prop ->
-    if not (contains (Term.string_of_term prop.Property.prop_term) "subrange") then
+    if not (contains (Term.string_of_term prop.Property.prop_term) "subrange") &&
+      not (contains (Term.string_of_term prop.Property.prop_term) "res-inst") then
       (
     Format.fprintf
       ppf 
