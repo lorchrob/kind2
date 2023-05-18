@@ -74,6 +74,7 @@ let rec pp_print_nusmv_symbol_node ppf = function
   | `DECIMAL f -> Decimal.pp_print_decimal ppf f
   (*| `BV b -> pp_print_bitvector_b ppf b *)
   | `BVSUB
+  | `BVNEG
   | `MINUS -> Format.pp_print_string ppf "-"
   | `BVADD
   | `PLUS -> Format.pp_print_string ppf "+"
@@ -82,6 +83,7 @@ let rec pp_print_nusmv_symbol_node ppf = function
   | `BVSDIV
   | `DIV
   | `INTDIV -> Format.pp_print_string ppf "/"
+  | `BVSREM 
   | `MOD -> Format.pp_print_string ppf "mod"
   (*| `ABS -> Format.pp_print_string ppf ""*)
   | `BVSLE
@@ -758,11 +760,15 @@ let rec pp_print_nusmv_trans_sys in_sys first ppf {
     );
   if (p <> []) then (
     List.iter (fun prop ->
+    if not (contains (Term.string_of_term prop.Property.prop_term) "subrange") then
+      (
     Format.fprintf
       ppf 
       "INVARSPEC @\n(@[<v>%a@]);\n"
-      (pp_print_nusmv_prop in_sys ss) prop;
-    ) p)
+      (pp_print_nusmv_prop in_sys ss) prop;)
+    ) p
+    
+    )
   );
 
   first_g := false;
