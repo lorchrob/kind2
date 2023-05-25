@@ -105,7 +105,7 @@ let string_of_state_var sv =
   let strs = String.split_on_char '-' str in
   let strs = ( 
     if List.length strs >= 2 && contains (List.nth strs (List.length strs - 2)) "_call"
-    then strs |> List.rev |> List.tl |> List.rev 
+    then strs |> init
     (*else if contains (List.nth strs (List.length strs - 1)) "_call"
           && (List.nth strs (List.length strs - 1)) |> String.split_on_char '_' |> List.length >= 3
     then strs |> List.rev |> List.tl |> List.rev*)
