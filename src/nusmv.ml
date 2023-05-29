@@ -95,6 +95,7 @@ let rec pp_print_nusmv_symbol_node ppf = function
   | `BVSGT
   | `GT -> Format.pp_print_string ppf ">"
   | `TO_INT32 -> ();
+  | `TO_REAL -> ();
   | _ as s -> Format.fprintf ppf "%s" (Symbol.string_of_symbol_node s)
 
 and pp_print_nusmv_symbol ppf s =
