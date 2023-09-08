@@ -123,6 +123,7 @@ type lustre_type =
   | RecordType of position * ident * typed_ident list
   | ArrayType of position * (lustre_type * expr)
   | EnumType of position * ident * ident list
+  | Type of position
   | TArr of position * lustre_type * lustre_type
   (* TArr is always constructed as GroupType -> GroupType
    *  as we can have more than one arguments and return 

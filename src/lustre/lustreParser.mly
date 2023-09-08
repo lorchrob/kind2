@@ -340,6 +340,7 @@ lustre_type:
   | INT16 { A.Int16 (mk_pos $startpos)}
   | INT32 { A.Int32 (mk_pos $startpos)}
   | INT64 { A.Int64 (mk_pos $startpos)}
+  | TYPE { A.Type (mk_pos $startpos)}
   | SUBRANGE;
     LSQBRACKET;
     l = expr_opt; 
