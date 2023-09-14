@@ -2183,6 +2183,8 @@ and eval_ast_type_flatten flatten_arrays ctx = function
     (* Add to empty trie with empty index *)
     D.singleton D.empty_index (Type.mk_int_range (Some const_lbound) (Some const_ubound))
 
+  | A.Type (pos) -> fail_at_position pos "Polymorphic nodes not supported in old frontend"
+
   | A.IntRange (pos, Some lbound, None) ->
     let const_lbound = const_int_of_ast_expr ctx pos lbound in 
     D.singleton D.empty_index (Type.mk_int_range (Some const_lbound) None)

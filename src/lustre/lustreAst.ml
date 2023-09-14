@@ -645,6 +645,7 @@ and pp_print_lustre_type ppf = function
   | Int16 _ -> Format.fprintf ppf "int16"
   | Int32 _ -> Format.fprintf ppf "int32"
   | Int64 _ -> Format.fprintf ppf "int64"
+  | Type _ -> Format.fprintf ppf "type"
   | IntRange (_, l, u) -> 
     let pp_print_opt ppf expr_opt = (match expr_opt with
       | Some expr -> pp_print_expr ppf expr

@@ -278,7 +278,8 @@ let rec mk_graph_type: LA.lustre_type -> dependency_analysis_data = function
     | Int16 _
     | Int32 _
     | Int64 _
-    | Real _ -> empty_dependency_analysis_data
+    | Real _ 
+    | Type _ -> empty_dependency_analysis_data (*!! Might be more complicated... !!*)
   | EnumType (pos, _, evals) ->
      List.fold_left union_dependency_analysis_data empty_dependency_analysis_data
        (List.map (Lib.flip (singleton_dependency_analysis_data const_prefix) pos) evals)   
@@ -1278,7 +1279,8 @@ let analyze_circ_node_equations: node_summary -> LA.node_item list -> (unit, [> 
       match (find_id_pos ad.id_pos_data (List.hd ids)) with
         | None -> assert false (* SyntaxChecks should guarantee this is impossible *)
         | Some p -> graph_error p (CyclicDependency ids))
-  >> R.ok ()
+        
+  >> (R.ok ())
 (** Check for node equations, we need to flatten the node calls using [node_summary] generated *)
 
 let check_no_input_output_local_duplicate ips ops locals =
@@ -1346,7 +1348,7 @@ let rec generate_summaries: dependency_analysis_data -> LA.t -> dependency_analy
     This function requires that the program does not have any forward references. *)
 
 let rec sort_and_check_equations: dependency_analysis_data -> LA.t -> (LA.t, [> error]) result = 
-  fun ad ->
+  fun ad -> 
   function
   | LA.FuncDecl (span, ndecl) :: ds ->
     let* ndecl' = check_node_equations ad ndecl in

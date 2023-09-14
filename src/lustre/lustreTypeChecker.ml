@@ -1443,7 +1443,15 @@ and build_node_fun_ty: Lib.position -> tc_context
   = fun pos ctx args rets ->
   let fun_const_ctx = List.fold_left (fun ctx (i,ty) -> add_const ctx i (LA.Ident (pos,i)) ty)
                         ctx (List.filter LH.is_const_arg args |> List.map LH.extract_ip_ty) in
-  let fun_ctx = List.fold_left (fun ctx (i, ty)-> add_ty ctx i ty) fun_const_ctx (List.map LH.extract_ip_ty args) in   
+  (*!! Problem is roughly here. 
+  For param ty: Type, we need to add ty as a user type with 'add_ty_decl'.
+  For param x: ty, we need to check if ty is a type from an earlier Type parameter. !!*)
+  let fun_ctx = List.fold_left (
+    fun ctx (i, ty) -> match ty with 
+      | LA.Type _ -> add_ty_decl ctx i
+      | _ -> add_ty ctx i ty
+    ) fun_const_ctx (List.map LH.extract_ip_ty args
+  ) in   
   let ops = List.map snd (List.map LH.extract_op_ty rets) in
   let ips = List.map snd (List.map LH.extract_ip_ty args) in
   let ret_ty = if List.length ops = 1 then List.hd ops else LA.GroupType (pos, ops) in
