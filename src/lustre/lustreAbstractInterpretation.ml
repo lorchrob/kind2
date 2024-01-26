@@ -165,8 +165,10 @@ let rec restrict_type_by ty restrict = match ty, restrict with
         let lnum = Numeral.max l1 l2 in
         let l = HString.mk_hstring (Numeral.string_of_numeral lnum) in
         Some (LA.Const (dpos, Num l)), not (Numeral.equal l1 lnum)
+
       | (Some _ as l), None -> l, false
       | None, (Some _ as l) -> l, true 
+
       | _ -> None, false
       
     in
@@ -177,11 +179,13 @@ let rec restrict_type_by ty restrict = match ty, restrict with
         let unum = Numeral.min u1 u2 in
         let u = HString.mk_hstring (Numeral.string_of_numeral unum) in
         Some (LA.Const (dpos, Num u)), not (Numeral.equal u1 unum)
+
+        (*!! Problem shows itself here *)
       | (Some _ as u), None -> u, false
       | None, (Some _ as u) -> u, true
+
       | _ -> None, false  
     in
-    (*IntRange (dpos, lower, upper)*)
     let is_restricted = is_restricted1 || is_restricted2 in
     if (lower = None && upper = None) 
     then Int dpos, is_restricted
