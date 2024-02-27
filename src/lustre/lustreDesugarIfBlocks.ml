@@ -19,6 +19,7 @@ module R = Res
 module A = LustreAst
 module AH = LustreAstHelpers
 module GI = GeneratedIdentifiers
+module AD = LustreAstDependencies
 module Chk = LustreTypeChecker
 module Ctx = TypeCheckerContext
 
@@ -76,14 +77,13 @@ let unwrap result = match result with
   | Error _ -> assert false
 
 (** Create a new oracle for use with if blocks. *)
-let mk_fresh_ib_oracle pos expr_type =
+let mk_fresh_ib_oracle pos ty =
   i := !i + 1;
   let prefix = HString.mk_hstring (string_of_int !i) in
-  let name = HString.concat2 prefix (HString.mk_hstring ("_" ^ GI.iboracle)) in
-  let nexpr = A.Ident (pos, name) in
-  let gids = { (GI.empty ()) with
-    ib_oracles = [name, expr_type]; }
-  in nexpr, gids
+  let name = HString.concat2 prefix (HString.mk_hstring GI.iboracle)  in
+  A.Call(pos, name, []), 
+  A.FuncDecl ( { A.start_pos = pos; A.end_pos = pos }, 
+                (name, true, [], [], [(pos, HString.mk_hstring "input", ty, ClockTrue)], [], [], None))
 
 let rec update_if_position_info node_id ni = match ni with
   | A.IfBlock (_, _, nis1, nis2) ->
@@ -244,20 +244,18 @@ let get_tree_type ctx lhs =
     (* Other cases not possible *)
     | _ -> assert false
 
+
 (** Fills empty spots in an ITE with oracles. *)
 let rec fill_ite_with_oracles expr ty =
   match expr with
     | A.TernaryOp (pos, Ite, cond, e1, e2) -> 
-      let e1, gids1, decls1 = fill_ite_with_oracles e1 ty in
-      let e2, gids2, decls2 = fill_ite_with_oracles e2 ty in
-      A.TernaryOp (pos, Ite, cond, e1, e2), GI.union gids1 gids2, decls1 @ decls2
+      let e1, decls1 = fill_ite_with_oracles e1 ty in
+      let e2, decls2 = fill_ite_with_oracles e2 ty in
+      A.TernaryOp (pos, Ite, cond, e1, e2), decls1 @ decls2
     | Ident(p, s) when s = ib_oracle_tree -> 
-      let (expr, gids) = (mk_fresh_ib_oracle p ty) in
-      (match expr with
-        (* Clocks are unsupported, so the clock value is hardcoded to ClockTrue *)
-        | A.Ident (_, name) ->  expr, gids, [A.NodeVarDecl(p, (p, name, ty, ClockTrue))]
-        | _ -> assert false (* not possible *))
-    | _ -> expr, GI.empty (), []
+      let expr, decl = mk_fresh_ib_oracle p ty in 
+      expr, [decl]
+    | _ -> expr, []
 
 (** Helper function to determine if two trees are equal *)
 let rec trees_eq node1 node2 = match node1, node2 with
@@ -271,22 +269,14 @@ let rec trees_eq node1 node2 = match node1, node2 with
 
   
 (** Removes redundancy from a binary tree. *)
-   let rec simplify_tree node = 
-    match node with
-      | Leaf _ -> node
-      | Node (i, str, j) -> 
-        let i = simplify_tree i in
-        let j = simplify_tree j in
-        if trees_eq i j then i else
-        Node (i, str, j)
-
-
-let split_and_flatten3 ls =
-  let xs = List.map (fun (x, _, _) -> x) ls |> List.flatten in
-  let ys = List.map (fun (_, y, _) -> y) ls |> List.flatten in
-  let zs = List.map (fun (_, _, z) -> z) ls |> List.flatten in
-  xs, ys, zs
-
+let rec simplify_tree node = 
+match node with
+| Leaf _ -> node
+| Node (i, str, j) -> 
+  let i = simplify_tree i in
+  let j = simplify_tree j in
+  if trees_eq i j then i else
+  Node (i, str, j)
 
 (** Helper function for 'desugar_node_item' that converts IfBlocks to a list
     of ITEs. There are a number of steps in this process.
@@ -298,7 +288,7 @@ let split_and_flatten3 ls =
     2. Doing any possible simplication on the above trees.
     3. Converting the trees to ITE expressions.
     4. Filling in the ITE expressions with oracles where variables are undefined.
-    5. Returning lists of new local declarations, generated equations, and gids
+    5. Returning lists of new local declarations and generated equations
     *)
 let extract_equations_from_if node_id ctx ib =
   (* Keep track of where the if block variables are defined so that the position can
@@ -314,53 +304,79 @@ let extract_equations_from_if node_id ctx ib =
   let tys = (List.map (get_tree_type ctx) lhss) in 
   let tys = (List.map (fun x -> match x with | Some y -> y | None -> assert false (* not possible *)) 
                        tys) in
-  let res = List.map2 fill_ite_with_oracles ites tys in
-  let ites = List.map (fun (x, _, _) -> x) res in
-  let gids = List.map (fun (_, y, _) -> y) res in
-  let new_decls = List.map (fun (_, _, z) -> z) res |> List.flatten in
-
-  let gids = List.fold_left GI.union (GI.empty ()) gids in
+  let ites, gen_decls = List.map2 fill_ite_with_oracles ites tys |> List.split in
   (* Combine poss, lhss, and ites into a list of equations *)
   let eqs = (List.map2 (fun (a, b) c -> (A.Body (A.Equation (a, b, c)))) (List.combine lhs_poss lhss) ites) in
-  R.ok (new_decls, eqs, [gids])
+  R.ok (eqs, gen_decls |> List.flatten)
 
 
 (** Desugar an individual node item. Given a node item, it returns any generated
-    local declarations (if we introduce new local variables), the converted
-    node_item list in the form of ITEs, and any gids).
+    local declarations (if we introduce new local variables) and the converted
+    node_item list in the form of ITEs).
 *)
 let rec desugar_node_item node_id ctx ni = match ni with
   | A.IfBlock _ as ib -> extract_equations_from_if node_id ctx ib
   | A.FrameBlock (pos, vars, nes, nis) -> 
     let* res = R.seq (List.map (desugar_node_item node_id ctx) nis) in
-    let decls, nis, gids = split_and_flatten3 res in
-    R.ok (decls, [A.FrameBlock(pos, vars, nes, nis)], gids)
-  | _ -> R.ok ([], [ni], [GI.empty ()])
-
+    let nis, gen_decls = List.split res in
+    R.ok ([A.FrameBlock(pos, vars, nes, List.flatten nis)], List.flatten gen_decls)
+  | _ -> R.ok ([ni], [])
 
 (** Desugars an individual node declaration (removing IfBlocks). *)
 let desugar_node_decl ctx decl = match decl with
   | A.FuncDecl (s, ((node_id, b, nps, cctds, ctds, nlds, nis, co) as d)) ->
     let ctx = Chk.get_node_ctx ctx d |> unwrap in
-    let* nis = R.seq (List.map (desugar_node_item node_id ctx) nis) in
-    let new_decls, nis, gids = split_and_flatten3 nis in
-    let gids = List.fold_left GI.union (GI.empty ()) gids in
-    R.ok (A.FuncDecl (s, (node_id, b, nps, cctds, ctds, new_decls @ nlds, nis, co)), GI.StringMap.singleton node_id gids) 
+    let* res = R.seq (List.map (desugar_node_item node_id ctx) nis) in
+    let nis, gen_decls = List.split res in
+    let nis, gen_decls = List.flatten nis, List.flatten gen_decls in
+    let ctx, gids, ns = List.fold_left (fun (acc_ctx, acc_gids, acc_ns) gen_decl -> match gen_decl with 
+      | A.FuncDecl (_, (fun_id, _, _, _, [_, _, ty, _], _, _, _)) -> 
+        Ctx.add_ty_node acc_ctx fun_id (A.TArr (Lib.dummy_pos, A.GroupType(Lib.dummy_pos, []), 
+                                                               A.GroupType(Lib.dummy_pos, [ty]))),
+        GI.StringMap.merge GI.union_keys2 acc_gids (GI.StringMap.singleton fun_id (GI.empty ())),
+        AD.IMap.union (fun _ _ v2 -> Some v2) acc_ns (AD.IMap.singleton fun_id (AD.IntMap.empty))
+      | _ -> assert false 
+    ) (ctx, GI.StringMap.empty, AD.IMap.empty) gen_decls in
+    R.ok (ctx, 
+         gen_decls @ [A.FuncDecl (s, (node_id, b, nps, cctds, ctds, nlds, nis, co))], 
+         gids,
+         ns) 
   | A.NodeDecl (s, ((node_id, b, nps, cctds, ctds, nlds, nis, co) as d)) -> 
     let ctx = Chk.get_node_ctx ctx d |> unwrap in
-    let* nis = R.seq (List.map (desugar_node_item node_id ctx) nis) in
-    let new_decls, nis, gids = split_and_flatten3 nis in
-    let gids = List.fold_left GI.union (GI.empty ()) gids in
-    R.ok (A.NodeDecl (s, (node_id, b, nps, cctds, ctds, new_decls @ nlds, nis, co)), GI.StringMap.singleton node_id gids) 
-  | _ -> R.ok (decl, GI.StringMap.empty)
+    let* res = R.seq (List.map (desugar_node_item node_id ctx) nis) in
+    let nis, gen_decls = List.split res in
+    let nis, gen_decls = List.flatten nis, List.flatten gen_decls in
+    let ctx, gids, ns = List.fold_left (fun (acc_ctx, acc_gids, acc_ns) gen_decl -> match gen_decl with 
+      | A.FuncDecl (_, (fun_id, _, _, _, [_, _, ty, _], _, _, _)) -> 
+        Ctx.add_ty_node acc_ctx fun_id (A.TArr (Lib.dummy_pos, A.GroupType(Lib.dummy_pos, []), 
+                                                               A.GroupType(Lib.dummy_pos, [ty]))),
+        GI.StringMap.merge GI.union_keys2 acc_gids (GI.StringMap.singleton fun_id (GI.empty ())),
+        AD.IMap.union (fun _ _ v2 -> print_endline (HString.string_of_hstring fun_id); Some v2) acc_ns (AD.IMap.singleton fun_id (AD.IntMap.empty))
+      | _ -> assert false 
+    ) (ctx, GI.StringMap.empty, AD.IMap.empty) gen_decls in
+    R.ok (ctx, 
+         gen_decls @ [A.NodeDecl (s, (node_id, b, nps, cctds, ctds,  nlds, nis, co))], 
+         gids,
+         ns) 
+  | _ -> R.ok (ctx, [decl], GI.StringMap.empty, AD.IMap.empty)
 
 
 (** Desugars a declaration list to remove IfBlocks. Converts IfBlocks to
     declarative ITEs, filling in oracles if branches are undefined. *)
-let desugar_if_blocks ctx sorted_node_contract_decls gids = 
+let desugar_if_blocks ctx sorted_node_contract_decls gids ns = 
   HString.HStringHashtbl.clear pos_list_map ;
   let* res = R.seq (List.map (desugar_node_decl ctx) sorted_node_contract_decls) in
-  let decls, gids2 = List.split res in
+  let split4 lst = 
+    List.fold_left (fun (acc1, acc2, acc3, acc4) (a, b, c, d) -> 
+      (a :: acc1, b :: acc2, c :: acc3, d :: acc4)
+    ) ([], [], [], []) lst |> 
+      (fun (a, b, c, d) -> (List.rev a, List.rev b, List.rev c, List.rev d)) 
+  in
+  let ctx, decls, gids2, ns2 = split4 res in
+  let ctx = List.fold_left Ctx.union Ctx.empty_tc_context ctx in 
   let gids2 = List.fold_left (GI.StringMap.merge GI.union_keys2) GI.StringMap.empty gids2 in
   let gids = GI.StringMap.merge GI.union_keys2 gids gids2 in
-  R.ok (decls, gids)
+  let ns = List.fold_left (AD.IMap.union (fun _ _ v2 -> Some v2)) ns ns2 in 
+  R.ok (ctx, List.flatten decls, gids, ns)
+
+  (* TODO: Update node summary data to include new generated imported functions. Debug. *)

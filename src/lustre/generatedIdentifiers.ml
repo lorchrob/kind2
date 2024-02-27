@@ -45,7 +45,6 @@ type t = {
     * LustreAst.contract_node_equation list)
     StringMap.t;
   oracles : (HString.t * LustreAst.lustre_type * LustreAst.expr) list;
-  ib_oracles : (HString.t * LustreAst.lustre_type) list;
   calls : (Lib.position (* node call position *)
     * HString.t (* abstracted output *)
     * LustreAst.expr (* condition expression *)
@@ -102,7 +101,6 @@ let union ids1 ids2 = {
       ids1.array_constructors ids2.array_constructors;
     node_args = ids1.node_args @ ids2.node_args;
     oracles = ids1.oracles @ ids2.oracles;
-    ib_oracles = ids1.ib_oracles @ ids2.ib_oracles;
     calls = ids1.calls @ ids2.calls;
     contract_calls = StringMap.merge union_keys
       ids1.contract_calls ids2.contract_calls;
@@ -126,7 +124,6 @@ let empty () = {
   array_constructors = StringMap.empty;
   node_args = [];
   oracles = [];
-  ib_oracles = [];
   calls = [];
   contract_calls = StringMap.empty;
   subrange_constraints = [];

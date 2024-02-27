@@ -167,7 +167,10 @@ let type_check declarations =
     let sorted_node_contract_decls, gids = RMA.remove_mult_assign global_ctx sorted_node_contract_decls in
 
     (* Step 10. Desugar imperative if block to ITEs *)
-    let* (sorted_node_contract_decls, gids) = (LDI.desugar_if_blocks global_ctx sorted_node_contract_decls gids) in
+    let* global_ctx, sorted_node_contract_decls, gids, node_summary = (LDI.desugar_if_blocks global_ctx sorted_node_contract_decls gids node_summary) in
+
+    TypeCheckerContext.pp_print_tc_context Format.std_formatter global_ctx;
+    
 
     (* Step 11. Desugar frame blocks by adding node equations and guarding oracles. *)
     let* (sorted_node_contract_decls, warnings) = LDF.desugar_frame_blocks sorted_node_contract_decls in 

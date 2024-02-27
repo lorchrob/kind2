@@ -1729,28 +1729,7 @@ and compile_node_decl gids is_function cstate ctx i ext inputs outputs locals it
       let result = X.fold over_indices index_types X.empty in
       (X.values result) @ oracles, osvm
     in
-    List.fold_left over_oracles ([], SVT.create 7) gids.GI.oracles in
-  let ib_oracles =
-    let over_ib_oracles  ib_oracles (id, expr_type) = (
-      let oracle_ident = mk_ident id in
-      let index_types = compile_ast_type cstate ctx map expr_type in
-      let over_indices = ( fun index index_type accum ->
-        let possible_state_var = mk_state_var
-          ~is_const:false
-          map
-          (node_scope @ I.reserved_scope)
-          oracle_ident
-          index
-          index_type
-          (Some N.Oracle)
-        in
-        match possible_state_var with
-          | Some state_var -> X.add index state_var accum
-          | None -> accum
-      ) in 
-      (X.fold over_indices index_types X.empty) :: ib_oracles
-    ) in
-    List.fold_left over_ib_oracles [] gids.GI.ib_oracles
+    List.fold_left over_oracles ([], SVT.create 7) gids.GI.oracles
   (* ****************************************************************** *)
   (* Node Calls                                                         *)
   (* ****************************************************************** *)
@@ -2227,7 +2206,7 @@ and compile_node_decl gids is_function cstate ctx i ext inputs outputs locals it
     inputs;
     oracles;
     outputs;
-    locals = ib_oracles @ locals;
+    locals = locals;
     equations;
     calls;
     asserts;

@@ -45,7 +45,6 @@ type t = {
     * LustreAst.contract_node_equation list)
     StringMap.t;
   oracles : (HString.t * LustreAst.lustre_type * LustreAst.expr) list;
-  ib_oracles : (HString.t * LustreAst.lustre_type) list;
   calls : (Lib.position (* node call position *)
     * HString.t (* abstracted output *)
     * LustreAst.expr (* condition expression *)

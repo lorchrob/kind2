@@ -239,6 +239,8 @@ and process_expr ind_vars ctx ns proj indices expr =
   (* Node calls *)
   | Call (_, i, es) ->
     let arg_vars = List.map (process_expr ind_vars ctx ns 0 indices) es in
+    print_endline (HString.string_of_hstring i);
+    LustreAstDependencies.pp_print_node_summary Format.std_formatter ns;
     let node_map = AD.IMap.find i ns in
     let dep_args = AD.IntMap.find proj node_map in
     List.fold_left (fun acc idx ->

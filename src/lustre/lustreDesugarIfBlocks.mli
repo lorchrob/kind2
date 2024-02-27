@@ -45,7 +45,12 @@ val pos_list_map : (Lib.position * LustreAst.eq_lhs) list HString.HStringHashtbl
 val desugar_if_blocks : 
 TypeCheckerContext.tc_context ->
   LustreAst.declaration list ->
-    GeneratedIdentifiers.t GeneratedIdentifiers.StringMap.t ->
-  (LustreAst.declaration list * GeneratedIdentifiers.t GeneratedIdentifiers.StringMap.t,
-   [> error ])
+  GeneratedIdentifiers.t HString.HStringMap.t ->
+  LustreAstDependencies.node_summary ->
+  ( TypeCheckerContext.tc_context
+    * LustreAst.declaration list
+    * GeneratedIdentifiers.t HString.HStringMap.t
+    * LustreAstDependencies.node_summary,
+    [> `LustreDesugarIfBlocksError of Lib.position * error_kind ]
+  )
   result
