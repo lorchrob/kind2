@@ -294,8 +294,8 @@ const_decl_body:
     { List.map (function e -> A.FreeConst (mk_pos $startpos, e, t)) (h :: l) } 
 
   (* Defined constant without a type *)
-  | ident; EQUALS; expr; SEMICOLON 
-    { fail_at_position (mk_pos $startpos) "Untyped constants not supported" }
+  | s = ident; EQUALS; e = expr; SEMICOLON 
+    { [A.UntypedConst (mk_pos $startpos, s, e)] }
 
   (* Defined constant with a type *)
   | c = typed_ident; EQUALS; e = expr; SEMICOLON 

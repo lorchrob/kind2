@@ -1192,7 +1192,9 @@ and check_type_node_decl: Lib.position -> tc_context -> LA.node_decl -> ([> warn
             check_type_well_formed local_ctx Local (Some node_name) false ty 
           | LA.NodeConstDecl (_, FreeConst (_, _, ty)) ->
             check_type_well_formed local_ctx Local (Some node_name) true ty 
-          | LA.NodeConstDecl (_, UntypedConst (_, _, _)) -> assert false  
+          | LA.NodeConstDecl (_, UntypedConst (_, _, e)) -> 
+            let* _ = (check_expr_is_constant local_ctx "constant definition" e) in 
+            R.ok ([])
         ) ldecls) in 
         Debug.parse "Local Typing Context with local state: {%a}" pp_print_tc_context local_ctx;
         (* Type check the node items now that we have all the local typing context *)
@@ -1625,7 +1627,10 @@ and build_type_and_const_context: tc_context -> LA.t -> (tc_context * [> warning
       let* ctx', warnings2 = build_type_and_const_context ctx' rest in 
       R.ok (ctx', warnings1 @ warnings2)   
     )
-  | LA.ConstDecl (_, UntypedConst _) :: _ -> assert false
+  | LA.ConstDecl (_, (UntypedConst _ as const_decl)) :: rest -> 
+    let* ctx', warnings1 = tc_ctx_const_decl ctx Global None const_decl in
+    let* ctx', warnings2 = build_type_and_const_context ctx' rest in 
+    R.ok (ctx', warnings1 @ warnings2) 
   | _ :: rest -> build_type_and_const_context ctx rest  
 (** Process top level type declarations and make a type context with 
  * user types, enums populated *)
