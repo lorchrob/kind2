@@ -1,24 +1,24 @@
 (* This file is part of the Kind 2 model checker.
 
-   Copyright (c) 2020 by the Board of Trustees of the University of Iowa
+Copyright (c) 2020 by the Board of Trustees of the University of Iowa
 
-   Licensed under the Apache License, Version 2.0 (the "License"); you
-   may not use this file except in compliance with the License.  You
-   may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License"); you
+may not use this file except in compliance with the License.  You
+may obtain a copy of the License at
 
-   http://www.apache.org/licenses/LICENSE-2.0 
+http://www.apache.org/licenses/LICENSE-2.0 
 
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-   implied. See the License for the specific language governing
-   permissions and limitations under the License. 
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+implied. See the License for the specific language governing
+permissions and limitations under the License. 
 
- *)
+*)
 
 (** Testing lustre frontend expected error paths
-   
-   @author Andrew Marmaduke *)
+
+@author Andrew Marmaduke *)
 
 open OUnit2
 
@@ -517,11 +517,11 @@ let _ = run_test_tt_main ("frontend LustreTypeChecker error tests" >::: [
     | _ -> false);
   mk_test "test not a field of record 02" (fun () ->
     match load_file "./lustreTypeChecker/not_a_field_of_record.lus" with
-    | Error (`LustreTypeCheckerError (_, UnificationFailed _)) -> true
+    | Error (`LustreTypeCheckerError (_, NotAFieldOfRecord _)) -> true
     | _ -> false);
   mk_test "test no value for field 01" (fun () ->
     match load_file "./lustreTypeChecker/no_value_for_field_01.lus" with
-    | Error (`LustreTypeCheckerError (_, UnificationFailed _)) -> true
+    | Error (`LustreTypeCheckerError (_, NoValueForRecordField _)) -> true
     | _ -> false);
   mk_test "test no value for field 02" (fun () ->
     match load_file "./lustreTypeChecker/no_value_for_field_02.lus" with
@@ -589,7 +589,7 @@ let _ = run_test_tt_main ("frontend LustreTypeChecker error tests" >::: [
     | _ -> false);
   mk_test "test expected record type" (fun () ->
     match load_file "./lustreTypeChecker/expected_record_type.lus" with
-    | Error (`LustreTypeCheckerError (_, UnificationFailed _)) -> true
+    | Error (`LustreTypeCheckerError (_, ExpectedRecordType _)) -> true
     | _ -> false);
   mk_test "test provided invalid type" (fun () ->
     match load_file "./lustreTypeChecker/provided.lus" with
