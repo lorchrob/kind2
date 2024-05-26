@@ -1,0 +1,5 @@
+node Counter(init: int) returns (y: int | (y > 0) -> (y > pre y);)
+let
+    -- Output y is initially positive and strictly increasing
+    y = (if init > 0 then init else 1) -> pre y + 1;
+tel

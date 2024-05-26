@@ -1,0 +1,7 @@
+node N(x: [int, int, int]; sum: int | sum = x.%0 + x.%1 + x.%2) 
+returns ()
+let
+    -- Fails because the first element can be greater than the sum 
+    -- if the other elements are negative
+    check x.%0 <= sum;
+tel

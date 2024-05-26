@@ -1,0 +1,9 @@
+node N(x: [int, int, int];) 
+returns (max: int | (max >= x.%0 and max >= x.%1 and max >= x.%2 and
+                     max =  x.%0  or max  = x.%1  or max =  x.%2))
+let
+    -- Definition of max fulfills its type obligation
+    max = if (x.%0 >= x.%1 and x.%0 >= x.%2) then x.%0
+          else if (x.%1 >= x.%0 and x.%1 >= x.%2) then x.%1
+          else x.%2;
+tel

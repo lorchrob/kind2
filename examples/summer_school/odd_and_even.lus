@@ -1,0 +1,17 @@
+type odd = subtype { n: int | n mod 2 = 1 };
+type even = subtype { n: int | n mod 2 = 0 };
+
+node N(x1: odd; x2: even) returns (y1: odd; y2: even; y3: odd);
+let
+    -- Odd plus even is odd 
+    y1 = x1 + x2; 
+
+    -- Odd times 2 is even
+    y2 = x1 * 2;
+
+    -- An odd cannot equal an even
+    check not (x1 = x2);
+
+    -- Even plus odd times two is odd (fails)
+    y3 = x2 + 2 * x1;
+tel

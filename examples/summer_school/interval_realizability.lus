@@ -1,0 +1,14 @@
+-- Unrealizable: There may not be an integer y between x1 and x2
+node imported N1(x1, x2: int) returns (y: int | x1 < y and y < x2);
+
+-- Unrealizable: Even when x2 > x1, y still might not exist (all are integers)
+node N2(x1: int; x2: int | x2 > x1) returns (y: int | x1 < y and y < x2);
+let
+  -- Realizability check only considers node interface.
+  -- When refinement type property fails, realizability check helps diagnose
+  -- that problem is in interface, not implementation. 
+  y = (x1 + x2) div 2;
+tel
+
+-- Realizable: If x1 and x2 are reals and x2 > x1, some y must exist between them
+node imported N3(x1: real; x2: real | x2 > x1) returns (y: real | x1 < y and y < x2);
