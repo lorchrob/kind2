@@ -12,6 +12,6 @@ let
     -- An odd cannot equal an even
     check not (x1 = x2);
 
-    -- Even plus odd times two is odd (fails)
+    -- Even plus two times odd is odd (fails)
     y3 = x2 + 2 * x1;
 tel
