@@ -1469,7 +1469,14 @@ and compile_node_decl gids is_function cstate ctx i ext inputs outputs locals it
         H.replace !map.usr_state_var ident indexed_state_var ;
         compiled_input
       | _ -> assert false (* Guaranteed by LustreSyntaxChecks *)
-    in List.fold_left over_inputs X.empty inputs
+    in 
+    (* Compile constant arguments first *)
+    let inputs = List.sort (fun input1 input2 -> match input1, input2 with 
+    | (_, _, _, _ , true), (_, _, _, _, false)  -> -1
+    | (_, _, _, _ , false), (_, _, _, _, true)  -> 1
+    | _  -> 0
+    ) inputs in
+    List.fold_left over_inputs X.empty inputs
   (* ****************************************************************** *)
   (* Node Outputs                                                       *)
   (* ****************************************************************** *)
@@ -2391,6 +2398,7 @@ and compile_declaration cstate gids ctx decl =
     compile_node_decl gids true cstate ctx i ext inputs outputs locals items contract
   | A.NodeDecl (_, (i, ext, [], inputs, outputs, locals, items, contract)) ->
     let gids = GI.StringMap.find i gids in
+    let ctx = LustreTypeChecker.add_io_node_ctx ctx inputs outputs in
     compile_node_decl gids false cstate ctx i ext inputs outputs locals items contract
   (* All contract node declarations are recorded and normalized in gids,
     this is necessary because each unique call to a contract node must be 
