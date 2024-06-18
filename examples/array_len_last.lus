@@ -1,0 +1,4 @@
+node N (arr: int^n; const n: int) returns () 
+let
+    check if n > 0 then arr[0] = 1 else true;
+tel

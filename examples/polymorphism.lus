@@ -1,0 +1,39 @@
+-- Various concepts: type inference, let polymorphism, universal types, 
+--                   parametric polymorphism, constraint typing
+-- * let polymorphism is a basic form of parametric polymorphism 
+-- * General question: How much do we need? Do we need full power of System F? 
+--                     Only let polymorphism from chapter 22?
+--                     Do we need to do constraint typing?
+--   I think we only need let polymorphism, as we only allow universal quantifiers
+--   at the left-most edge of type stuff.
+-- * How does our requirement of type annotations affect the typing algos?
+
+type T3;
+
+node N<<T>>(x: T) returns (y: T) 
+let 
+    -- Should be typable for any such T   
+    y = x -> pre x;
+tel
+
+node M<<T2>>(x1: int; x2: bool; x3: T2) returns (y1: int; y2: bool; y3: T2)
+let
+    y1 = N<<int>>(x1); 
+
+    y2 = N<<bool>>(x2);
+
+    y3 = N<<T2>>(x3);
+tel
+
+-- Specific implementation-level questions/notes:
+--   * Syntax checks specific to polymorphism?
+--   * Consider shadowing
+--   * Circularity checks specific to polymorphism?
+---  * In node calls, Node<T>(arg), T will initially be parsed as a UserType, but it might actually 
+--     need to be a type variable, depending on the context (if T is a type parameter in the callee).
+--     We can implement it this way, but there might be a clever way to parse to UserType or TypeVariable initially,
+--     rather than in a later pass. !!It may be useful to see how we're handling AbstractType.
+--     Maybe its correct to leave them as UserType in typed idents, and then we can add the TypeVariable part into the context,
+--     like abstract type
+--   * Remember to allow bracket and paren arguments to refinement types, e.g. Type BNat(n: Nat) = subtype { x: int | 0 <= x and x <= n }
+--   * Test hanging TypeVariable/UserType

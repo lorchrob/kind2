@@ -1,0 +1,88 @@
+include "library/baby_check.lus"
+
+(* S is true iff X has been true at some point previously and Y
+   has been true ever since (or if X is true in the current timestep) *)
+node Since(X, Y: bool) returns (S : bool);
+let
+  S =  X or (Y and (false -> pre S));
+tel
+
+(* Y is true iff X has been true at some point previously or in the current timestep *)
+node Once(X: bool) returns (Y: bool);
+let
+  Y = X or (false -> pre Y);
+tel
+
+(* Y is true iff X has been true at every time step, including the current timestep *)
+node Sofar( X : bool ) returns ( Y : bool );
+let
+  Y = X -> (X and pre Y);
+tel
+
+node Initially (x: bool) returns (y: bool);
+let
+  y = x -> pre y;
+tel
+
+(* Y is true iff X is true now but wasn't true in the previous timestep *)
+node Rise( X : bool ) returns ( Y : bool );
+let
+  Y = X -> (X and not pre X);
+tel
+
+(* Y is true iff X is false now but was true in the previous timestep *)
+node Fall( X : bool ) returns ( Y : bool );
+let
+  Y = false -> (not X and pre X);
+tel
+
+(* Y is equal to the number of times X has been true so far *)
+node Count( X: bool ) returns (Y: int );
+let
+  Y = (if X then 1 else 0) -> (if X then pre Y + 1 else pre Y);
+tel
+
+(* Predicate to determine whether "in" is a well-formed baby *)
+node imported IsGoodBaby(in: bool^64) returns (out: bool);
+(*@contract
+  guarantee out = (in[31] and (forall (i: int) 0 <= i and i < 31 => not in[i]));
+*)
+
+(* Node specifying the Master process's behavior *)
+node imported Master(TREADY: bool) returns (TVALID, transfer: bool; TDATA: bool^64; TLAST: bool);
+(*@contract 
+  (* For a transfer to occur, both TVALID and TREADY must be asserted *)
+  guarantee transfer => (TREADY and TVALID);
+
+  (* A master is not permitted to wait until TREADY is asserted before asserting TVALID *)
+  (* My interpretation-- the master should not be restricted to only waiting until after TREADY before
+     asserting TVALID *)
+
+  (* Once TVALID is asserted it must remain asserted until the handshake occurs *)
+  (* If Master is not transferring data, TVALID must fall *)
+  guarantee Fall(TVALID) => Fall(transfer);
+  --guarantee true;
+*)
+
+(* Node specifying the Slave process's behavior *)
+node imported Slave(TVALID, transfer: bool; TDATA: bool^64; TLAST: bool) returns (TREADY: bool; isFoul, isBad, isGood, isReady: bool; success, error: bool);
+(* A slave is permitted to wait for TVALID to be asserted before asserting the corresponding TREADY *)
+(* If a slave asserts TREADY, it is permitted to deassert TREADY before TVALID is asserted *)
+(*@contract
+  (* Checks on TDATA *)
+  guarantee BabyCheck(TVALID, transfer, TDATA, TLAST, TREADY, success, error, isFoul, isBad, isGood, isReady);
+*)
+
+(* Top-level node with system-level properties *)
+node Main(RESET: bool) returns (TREADY, TVALID, transfer, TLAST: bool; TDATA: bool^64; isFoul, isBad, isGood, isReady: bool; success, error: bool; P1, P2: bool);
+let
+  (TVALID, transfer, TDATA, TLAST) = Master(TREADY);
+  (TREADY, isFoul, isBad, isGood, isReady, success, error) = Slave(TVALID, transfer, TDATA, TLAST);
+
+  P1 = (Initially(RESET) and Rise(transfer) and IsGoodBaby(TDATA) and TLAST) => isGood;
+  P2 = (Initially(RESET) and Rise(transfer) and not IsGoodBaby(TDATA) and TLAST) => isBad;
+
+  check P1;
+  check P2;
+  --%MAIN;
+tel

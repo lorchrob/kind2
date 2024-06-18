@@ -1,0 +1,40 @@
+type Var = subtype { x: int | x > pre x }; 
+type Nat = subtype { x: int | x >= 0 };
+--type Var2<y> = subtype { x: int | x > y };
+const m3: subrange [0, 5] of int; 
+const m4: bool = 2; 
+--const m2: Nat; -- should be disallowed (global constants shouldn't have refinement types, period)
+--const m3: subtype { x: int  |  true }^5 = [1,2,3,4,5]; -- should be disallowed (global constants shouldn't have refinement types, period)
+node N(x: int) returns (); 
+   --const c1: subtype { n: int | pre n > 0 }; -- should be disallowed
+   --const c9: Var; -- should be disallowed
+ 
+   const c3: int = 3;
+   const c2: subtype { n: int | n + c3 > 0 }; -- should be allowed   
+   
+   --const c3 = c2;   
+
+   --const c4: int = pre 9 + 1; -- should be disallowed
+   const c5: int = c3 + 2; -- should be allowed 
+   
+   const c6: int;  
+ 
+   --const c7: int = c8; -- cyclic, should be disallowed
+   --const c8: int = c7;
+
+   const c9: subtype { n: int | n < c10 }; -- cyclic, should be allowed
+   const c10: subtype { n: int | n < c9 };  
+
+   -- Dependency analysis for local constants and for local variables can be handled independently
+   -- In first case mirror global constants (for definitions, not types), in second case we don't do anything
+let 
+   --c6 = 3; -- should be disallowed
+   --check c4 < 5;
+   --check c7 = c8;
+   check true;
+tel
+
+--!! Add to primer
+--!! Add primer to documentation, use .rst (or link to pdf)
+
+--!! Examples using refinement types

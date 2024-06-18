@@ -1,0 +1,99 @@
+node imported Controller(signal: bool) returns (vgs_sat: real; fault: real);
+
+(*@contract
+
+  -- initial conditions
+
+  guarantee  
+
+            vgs_sat = 0.0 -> true
+
+        and fault = 0.0 -> true;
+
+ 
+
+  -- Controller shall set vgs_sat to 10.0 when event signal occurs
+
+  guarantee signal => (vgs_sat = 10.0);
+
+ 
+
+  -- Controller shall within 2 steps set fault to 1.0 when vgs_sat = 10.0
+
+  guarantee
+
+    true -> pre true -> pre pre (vgs_sat = 10.0) =>
+
+      (
+
+        pre pre (fault = 1.0) or
+
+        pre (fault = 1.0) or
+
+        (fault = 1.0)
+
+      );
+
+ 
+
+  -- Controller shall set fault to 0.0 when vgs_sat = 10.0 in the past 3 steps.
+
+  guarantee
+
+   true -> pre true -> pre true -> pre pre pre (vgs_sat = 10.0) =>
+
+      (
+
+        pre pre pre (fault = 0.0) or
+
+        pre pre (fault = 0.0) or
+
+        pre (fault = 0.0) or
+
+        (fault = 0.0)
+
+      );
+
+ 
+
+  guarantee
+
+     true -> (not signal => vgs_sat = pre vgs_sat);
+
+  guarantee
+
+     true -> (not pre (vgs_sat = 10.0) => fault = pre fault);
+
+  guarantee
+
+    true -> (pre true -> (pre true -> (not (pre pre pre vgs_sat = 10.0 )=> fault = pre fault)));
+
+ 
+
+*)
+
+ 
+
+-- Implicit frame conditions
+
+-- Initializations
+
+ 
+
+-- completeness with timing constraints
+
+node TopLevel(signal: bool) returns (vgs_sat1 : real; fault1: real; vgs_sat2: real; fault2:real );
+
+let
+
+    vgs_sat1, fault1 = Controller(signal);
+
+    vgs_sat2, fault2 = Controller(signal);
+
+    check "prop1" vgs_sat1 = vgs_sat2;
+
+    check "prop2" fault1 = fault2;
+
+    --%MAIN;
+
+tel

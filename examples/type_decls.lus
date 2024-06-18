@@ -1,0 +1,9 @@
+type even = subtype {z : int | z mod 2 = 0};
+type odd = even; 
+
+type T;
+
+node N1(x: int) returns (z: odd; out: int^5);
+let
+    check true;
+tel

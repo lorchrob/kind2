@@ -1,0 +1,7 @@
+node N<<T>>(x: T) returns (y: T) 
+let 
+    -- Should be typable for any such T   
+    y = x -> pre x;
+
+    check true -> (y = pre x);
+tel

@@ -1,0 +1,50 @@
+
+  public async conflictingGuarantees(analysis: Analysis): Promise<void> {
+    var name = analysis.parent.name
+    var context = "";
+    if (analysis.realizabilitySource === "inputs") {
+      context = "environment"
+    }
+    else if (analysis.realizabilitySource === "contract") {
+      context = "contract"
+    }
+    else if (analysis.realizabilitySource === "type") {
+      context = "type"
+    }
+    await this._client.sendRequest("kind2/conflictingGuarantees", [analysis.parent.uri, name, context]).then((cg: string) => {
+      WebPanel.createOrShow(this._context.extensionPath);
+      WebPanel.currentPanel?.sendMessage({ uri: analysis.parent.uri, main: analysis.parent.name, json: cg });
+    }).catch(reason => {
+      window.showErrorMessage(reason.message);
+    });
+  }
+
+
+  @JsonRequest(value = "kind2/conflictingGuarantees", useSegment = false)
+  public CompletableFuture<String> conflictingGuarantees(String uri, String component, String context) {
+    return CompletableFuture.supplyAsync(() -> {
+      if (!analysisResults.containsKey(uri)) {
+        return null;
+      }
+      if (!analysisResults.get(uri).containsKey(component)) {
+        return null;
+      }
+      for (Analysis analysis : analysisResults.get(uri).get(component).getAnalyses()) {
+        if (analysis.getContext().equals(context)) {
+          return analysis.getConflictingGuarantees();
+        }
+      }
+      return null;
+    });
+  }
+
+
+  public void setConflictingGuarantees(String val) 
+  {
+    this.conflictingGuarantees = val;
+  }
+
+  public String getConflictingGuarantees() 
+  {
+    return this.conflictingGuarantees;
+  }

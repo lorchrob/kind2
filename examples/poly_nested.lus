@@ -1,0 +1,35 @@
+--!! Fix exception thrown when array parameter before length parameter 
+
+--!! Introduce nodes that can take functions as arguments, then do map and fold
+
+-- type UPair<<T>> = [T, T];
+
+-- type Nat = subtype { x: int | x >= 0 };
+-- type BNat(n: Nat) = subtype { x: Nat | x <= n };
+
+-- type FancyPair<<T>>(n: Nat) = [T, BNat(n)];
+-- type FancyPair<<T: Type; n: Nat>> = [T, BNat(n)];
+-- type FancyPair<<T; n: Nat>> = [T, BNat(n)];
+-- type FancyPair<<T; n: List<<T>>>> = subtype { x: int | x > len(n) };
+type FancyPair<<T; n: List<<T>>>> = subtype { x: int | x > len(n) };
+type Vector<<T, n: Nat>> = something (must have a definition if the type is parametric)
+type NewType<<T>>(n: Nat, v: Vector<<T, n>>) 
+
+-- node N<<T>>(x: T^n; const n: int) returns (y: T^5) 
+-- let 
+--     -- Should be typable for any such T   
+--     y = x -> pre x;
+-- tel
+
+node N(x: int^n; const n: int) returns (y: int^n) 
+let 
+    -- Should be typable for any such T   
+    y = x -> pre x;
+tel
+
+-- node M<<T2>>(x1: int^5; x2: bool^5) returns (y1: int^5; y2: bool^5)
+-- let
+--     y1 = N<<int>>(x1); 
+
+--     y2 = N<<bool>>(x2);
+-- tel

@@ -1,0 +1,22 @@
+node imported VariableCheck(TVALID, transfer: bool; TDATA: int64; TLAST: bool; TREADY: bool; success, error: bool; isFoul, isBad, isGood, isReady: bool) returns (OK: bool);
+(* A slave is permitted to wait for TVALID to be asserted before asserting the corresponding TREADY *)
+(* If a slave asserts TREADY, it is permitted to deassert TREADY before TVALID is asserted *)
+(*@contract
+  var time_left: int64 = if Rise(transfer) then TDATA else ((int64 -1) -> pre time_left - int64 1); 
+
+  guarantee OK = 
+  (
+    (isFoul = ((transfer and (time_left < int64 0)) or 
+              ((false -> pre isFoul) and not TLAST))) and 
+
+    (isBad = (Fall(transfer) and (time_left < int64 0) and (false -> pre TLAST))) and 
+
+    (isGood = (Fall(transfer) and (time_left = int64 0) and (false -> pre TLAST))) and
+
+    (isReady = not isFoul) and 
+
+    (success = (isGood and (false -> pre isGood))) and 
+
+    (error = (isBad and (false -> pre isBad)))
+  );
+  *)

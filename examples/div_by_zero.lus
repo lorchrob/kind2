@@ -1,0 +1,10 @@
+node Top (x: int) returns (out: int)
+let
+    out = SafeDiv(10, 0);
+    check out = 5;
+tel
+
+node SafeDiv(numerator: int; denominator: int | denominator <> 0) returns (quotient: int)
+let
+    quotient = numerator mod denominator;
+tel

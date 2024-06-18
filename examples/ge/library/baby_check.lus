@@ -1,0 +1,41 @@
+node imported BabyCheck(TVALID, transfer: bool; TDATA: bool^64; TLAST: bool; TREADY: bool; success, error: bool; isFoul, isBad, isGood, isReady: bool;) returns (OK: bool);
+(* A slave is permitted to wait for TVALID to be asserted before asserting the corresponding TREADY *)
+(* If a slave asserts TREADY, it is permitted to deassert TREADY before TVALID is asserted *)
+(*@contract
+  guarantee OK = 
+  (
+    (isFoul = ((Rise(transfer) and not TLAST) or 
+              ((false -> pre isFoul) and not TLAST))) and 
+
+    (isBad = ( (Rise(transfer) and TLAST and (not (TDATA[31] and (forall (i: int) 0 <= i and i < 31 => not TDATA[i])) )) or 
+               (false -> pre isBad) )) and 
+
+    (isGood = ((Rise(transfer) and TLAST and TDATA[31] and (forall (i: int) 0 <= i and i < 31 => not TDATA[i])) or 
+              (false -> (pre (Rise(transfer) and TLAST and TDATA[31] and (forall (i: int) 0 <= i and i < 31 => not TDATA[i])))) and (false -> pre isGood))) and 
+
+    (isReady = not isFoul) and 
+
+    (success = (isGood and (false -> pre isGood))) and 
+
+    (error = (isBad and (false -> pre isBad)))
+  );
+
+
+  (* Checks on TDATA *)
+  -- guarantee OK1 =
+  --   (STATUS = 
+  --     if Rise(transfer) and not TLAST then FOUL 
+  --     else if (false -> (pre STATUS = FOUL)) and not TLAST then FOUL
+  --     else if Rise(transfer) then 
+  --         (if (TDATA[31] and (forall (i: int) 0 <= i and i < 31 => not TDATA[i]) and TLAST) 
+  --         then GOOD 
+  --         else BAD)
+  --      else if (false -> (pre Rise(transfer))) and (false -> (pre STATUS = GOOD)) then GOOD 
+  --      else if (false -> (pre STATUS = BAD)) then BAD
+  --      else READY) ;
+
+  -- guarantee OK5 =
+  --   (SIGNAL = if (false -> (STATUS = GOOD) and (pre STATUS = GOOD)) then SUCCESS
+  --            else if (STATUS = BAD) and (pre STATUS = BAD) then ERROR
+  --            else NONE) ;
+*)

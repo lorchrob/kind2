@@ -1,0 +1,17 @@
+
+--!! Check if it would be more consistent to have --lus_main_type to trump --enable CONTRACTCK
+--!! Distinguish between different parameters and engines that are enabled
+
+--!! Leave buttons there in all cases. Don't slice type declarations with no refinement types in realizability checking
+
+type Nat = subtype { x: int | x >= 0 };
+
+--!! n becomes another argument for generated contract
+--!! Angle brackets for inferrable type arguments
+type BNat<α>(n: int) = subtype { x: α | 0 <= x and x <= n};
+
+node imported M (x: int) returns (y: int);
+(*@contract
+    guarantee y > x;
+    guarantee y < x;
+*)

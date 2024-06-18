@@ -1471,12 +1471,19 @@ and compile_node_decl gids is_function cstate ctx i ext inputs outputs locals it
       | _ -> assert false (* Guaranteed by LustreSyntaxChecks *)
     in 
     (* Compile constant arguments first *)
-    let inputs = List.sort (fun input1 input2 -> match input1, input2 with 
+    (*!! Changing order of inputs leads to problems.*)
+    (* let inputs = List.sort (fun input1 input2 -> match input1, input2 with 
     | (_, _, _, _ , true), (_, _, _, _, false)  -> -1
     | (_, _, _, _ , false), (_, _, _, _, true)  -> 1
     | _  -> 0
-    ) inputs in
-    List.fold_left over_inputs X.empty inputs
+    ) inputs in *)
+    let c_inputs =  List.fold_left (fun c_input ((_, _, _, _, is_const) as input) -> 
+      if is_const then over_inputs c_input input else c_input
+    ) X.empty inputs in
+    let c_inputs =  List.fold_left (fun c_input ((_, _, _, _, is_const) as input) -> 
+      if not is_const then over_inputs c_input input else c_input
+    ) c_inputs inputs in
+    c_inputs
   (* ****************************************************************** *)
   (* Node Outputs                                                       *)
   (* ****************************************************************** *)
