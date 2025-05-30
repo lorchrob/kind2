@@ -203,6 +203,8 @@ let type_check declarations =
       IC.inline_constants global_ctx sorted_node_contract_decls
     in
 
+    List.iter (LA.pp_print_declaration Format.std_formatter) const_inlined_nodes_and_contracts;
+
     (* Step 14. Check that inductive array equations are well-founded *)
     let* _ = LAD.check_inductive_array_dependencies inlined_global_ctx node_summary const_inlined_nodes_and_contracts in
 
@@ -225,10 +227,14 @@ let type_check declarations =
       LS.no_quant_vars_in_calls_to_non_inlinable_funcs inlinable_funcs declarations
     in
 
+    (* List.iter (LA.pp_print_declaration Format.std_formatter) const_inlined_nodes_and_contracts; *)
+
     (* Step 19. Normalize AST: guard pres, abstract to locals where appropriate *)
     let* (normalized_nodes_and_contracts, gids, warnings6) =
       LAN.normalize inlined_global_ctx abstract_interp_ctx inlinable_funcs const_inlined_nodes_and_contracts gids
     in
+
+    (* List.iter (LA.pp_print_declaration Format.std_formatter) normalized_nodes_and_contracts; *)
     
     Res.ok (inlined_global_ctx,
       gids,

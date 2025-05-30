@@ -99,6 +99,18 @@ let rec is_normal_form: TC.tc_context -> LA.expr -> bool = fun ctx ->
     | TupleProject (_, e, _) -> is_normal_form ctx e
   | _ -> false
 (** is the expression in a normal form? *)
+
+(* Similar to traverse_group_expr_list from TypeCheckerContext, 
+   but returns the whole expr list *)
+let rec traverse_group_expr_list f ctx proj es =
+  match proj, es with
+  | 0, e :: es -> f 0 e :: es
+  | i, e :: es -> (
+    let a = TypeCheckerContext.arity_of_expr ctx e in
+    if a<=i then e :: traverse_group_expr_list f ctx (i-a) es
+    else f proj e :: es
+  )
+  | _ -> assert false
          
 let rec eval_int_expr: TC.tc_context -> LA.expr -> (int, [> error]) result = fun ctx ->
   function
@@ -216,9 +228,9 @@ and eval_comp_op: TC.tc_context -> LA.comparison_operator
   | Gt -> R.ok (v1 > v2)
 (** try and evalutate comparison op expression to bool, return error otherwise *)
 
-and simplify_array_index ctx pos e1 idx kind =
-  let e1' = simplify_expr ctx e1 in
-  let idx' = simplify_expr ctx idx in
+and simplify_array_index ctx pos proj e1 idx kind =
+  let e1' = simplify_expr ctx proj e1 in
+  let idx' = simplify_expr ctx proj idx in
   let raise_error () =
     raise (Out_of_bounds (pos, "Array element access out of bounds."))
   in
@@ -235,9 +247,9 @@ and simplify_array_index ctx pos e1 idx kind =
     ArrayIndex (pos, e1', idx', kind)
 (** picks out the idx'th component of an array if it can *)
 
-and simplify_tuple_proj: TC.tc_context -> Lib.position -> LA.expr -> int -> LA.expr
-  = fun ctx pos e1 idx ->
-  match (simplify_expr ctx e1) with
+and simplify_tuple_proj: TC.tc_context -> Lib.position -> int -> LA.expr -> int -> LA.expr
+  = fun ctx pos proj e1 idx ->
+  match (simplify_expr ctx proj e1) with
   | LA.GroupExpr (_, _, es) ->
      if List.length es > idx
      then List.nth es idx
@@ -279,21 +291,32 @@ and push_pre is_guarded pos =
   | Arrow _ as e -> LA.Pre (pos, e)
   | Call _ as e -> LA.Pre (pos, e)
 
-and simplify_expr ?(is_guarded = false) ctx =
+and simplify_expr ?(is_guarded = false) ?(indices = []) ctx (proj: int) =
   function
   | LA.Const _ as c -> c
   | LA.Ident (_, i) as ident ->
-     (match (TC.lookup_const ctx i) with
-      | Some (const_expr, _, _) ->
-         (match const_expr with
-          | LA.Ident (_, i') as ident' ->
-             if HString.compare i i' = 0 (* If This is a free constant *)
-             then ident
-             else simplify_expr ~is_guarded ctx ident'
-          | _ -> simplify_expr ~is_guarded ctx const_expr)
-      | None -> ident)
+    Format.fprintf Format.std_formatter "i: %a\n"
+      HString.pp_print_hstring i;
+    Format.fprintf Format.std_formatter "indices: %a\n"
+      (Lib.pp_print_list HString.pp_print_hstring ", ") indices;
+    (* don't inline constants shadowed by ArrayDef indices *)
+    if List.mem i indices then 
+      (Format.pp_print_string Format.std_formatter "shadowing\n"; ident) 
+  
+    else 
+      (Format.pp_print_string Format.std_formatter "no shadowing\n";
+    (* no shadowing *)
+    (match (TC.lookup_const ctx i) with
+    | Some (const_expr, _, _) ->
+        (match const_expr with
+        | LA.Ident (_, i') as ident' ->
+            if HString.compare i i' = 0 (* If This is a free constant *)
+            then ident
+            else simplify_expr ~indices ~is_guarded ctx proj ident'
+        | _ -> simplify_expr ~indices ~is_guarded ctx proj const_expr)
+    | None -> ident))
   | LA.UnaryOp (pos, op, e1) ->
-    let e1' = simplify_expr ~is_guarded ctx e1 in
+    let e1' = simplify_expr ~indices ~is_guarded ctx proj e1 in
     let e' = LA.UnaryOp (pos, op, e1') in
     (match op with
     | LA.Uminus -> (match eval_int_unary_op ctx pos op e1' with
@@ -304,19 +327,19 @@ and simplify_expr ?(is_guarded = false) ctx =
       | Error _ -> e')
     | _ -> e')
   | LA.Pre (pos, e) ->
-    let e' = simplify_expr ~is_guarded:false ctx e in
+    let e' = simplify_expr ~indices ~is_guarded:false ctx proj e in
     if is_guarded && LH.expr_is_const e' then e'
     else
       if Flags.lus_push_pre ()
       then push_pre is_guarded pos e'
       else Pre (pos, e')
   | Arrow (pos, e1, e2) ->
-    let e1' = simplify_expr ~is_guarded ctx e1 in
-    let e2' = simplify_expr ~is_guarded:true ctx e2 in
+    let e1' = simplify_expr ~indices ~is_guarded ctx proj e1 in
+    let e2' = simplify_expr ~indices ~is_guarded:true ctx proj e2 in
     Arrow (pos, e1', e2')
   | LA.BinaryOp (pos, bop, e1, e2) ->
-     let e1' = simplify_expr ~is_guarded ctx e1 in
-     let e2' = simplify_expr ~is_guarded ctx e2 in
+     let e1' = simplify_expr ~indices ~is_guarded ctx proj e1 in
+     let e2' = simplify_expr ~indices ~is_guarded ctx proj e2 in
      let e' = LA.BinaryOp (pos, bop, e1', e2') in
      (match (eval_int_binary_op ctx pos bop e1' e2') with
       | Ok v -> LA.Const (pos, Num (v |> string_of_int |> HString.mk_hstring))
@@ -325,109 +348,123 @@ and simplify_expr ?(is_guarded = false) ctx =
      (match top with
      | Ite -> 
         (match eval_bool_expr ctx cond with
-        | Ok v -> if v then simplify_expr ~is_guarded ctx e1
-          else simplify_expr ~is_guarded ctx e2 
+        | Ok v -> if v then simplify_expr ~indices ~is_guarded ctx proj e1
+          else simplify_expr ~indices ~is_guarded ctx proj e2 
         | Error _ ->
-          let cond' = simplify_expr ~is_guarded ctx cond in
-          let e1' = simplify_expr ~is_guarded ctx e1 in
-          let e2' = simplify_expr ~is_guarded ctx e2 in
+          let cond' = simplify_expr ~indices ~is_guarded ctx proj cond in
+          let e1' = simplify_expr ~indices ~is_guarded ctx proj e1 in
+          let e2' = simplify_expr ~indices ~is_guarded ctx proj e2 in
             TernaryOp (pos, top, cond', e1', e2')))
   | LA.CompOp (pos, cop, e1, e2) ->
-     let e1' = simplify_expr ~is_guarded ctx e1 in
-     let e2' = simplify_expr ~is_guarded ctx e2 in
+     let e1' = simplify_expr ~indices ~is_guarded ctx proj e1 in
+     let e2' = simplify_expr ~indices ~is_guarded ctx proj e2 in
      let e' = LA.CompOp (pos, cop, e1', e2') in
      (match (eval_comp_op ctx cop e1' e2') with
       | Ok v -> LA.Const (pos, lift_bool v)
       | Error _ -> e')
   | LA.GroupExpr (pos, g, es) ->
-     let es' = List.map (fun e -> simplify_expr ~is_guarded ctx e) es in 
-     LA.GroupExpr (pos, g, es')
+     let f idx exp = simplify_expr ~indices ~is_guarded ctx idx exp in
+     let es' = traverse_group_expr_list f ctx proj es in
+     GroupExpr (pos, g, es')
   | LA.RecordExpr (pos, i, ps, fields) ->
-     let fields' = List.map (fun (f, e) -> (f, simplify_expr ~is_guarded ctx e)) fields in
+     let fields' = List.map (fun (f, e) -> (f, simplify_expr ~indices ~is_guarded ctx proj e)) fields in
      LA.RecordExpr (pos, i, ps, fields')
   | LA.ArrayConstr (pos, e1, e2) ->
-     let e1' = simplify_expr ~is_guarded ctx e1 in
-     let e2' = simplify_expr ~is_guarded ctx e2 in
+     let e1' = simplify_expr ~indices ~is_guarded ctx proj e1 in
+     let e2' = simplify_expr ~indices ~is_guarded ctx proj e2 in
      let e' = LA.ArrayConstr (pos, e1', e2') in e'
      (*(match (eval_int_expr ctx e2) with
       | Ok size -> LA.GroupExpr (pos, LA.ArrayExpr, List.init size (fun _ -> e1'))
       | Error _ -> e')*)
-  | LA.ArrayIndex (pos, e1, e2, kind) -> simplify_array_index ctx pos e1 e2 kind
-  | LA.TupleProject (pos, e1, e2) -> simplify_tuple_proj ctx pos e1 e2  
+  | LA.ArrayIndex (pos, e1, e2, kind) -> simplify_array_index ctx pos proj e1 e2 kind
+  | LA.TupleProject (pos, e1, e2) -> simplify_tuple_proj ctx pos proj e1 e2  
   | Call (pos, ty_args, i, es) ->
-    let es' = List.map (fun e -> simplify_expr ~is_guarded:false ctx e) es in
+    Format.fprintf Format.std_formatter "Exprs in call before processing: %a\n"
+      (Lib.pp_print_list LA.pp_print_expr ", ") es;
+    let es' = List.map (fun e -> simplify_expr ~indices ~is_guarded:false ctx 0 e) es in
+    Format.fprintf Format.std_formatter "Exprs in call after processing: %a\n"
+      (Lib.pp_print_list LA.pp_print_expr ", ") es';
     Call (pos, ty_args, i, es')
   | Quantifier (pos, q, tis, e) -> 
     (* 1. Don't inline constants that are shadowed by quantified vars (by removing these constants from the ctx)
        2. Perform inlining within tis *)
     let ctx, tis = List.fold_left (fun (acc_ctx, acc_tis) (p, id, ty) -> 
       let acc_ctx = TC.remove_const acc_ctx id in 
-      let acc_ti  = (p, id, inline_constants_of_lustre_type acc_ctx ty) in 
+      let acc_ti  = (p, id, inline_constants_of_lustre_type acc_ctx ty proj) in 
       acc_ctx, acc_tis @ [acc_ti] 
     ) (ctx, []) tis in
-    let e' = simplify_expr ~is_guarded:false ctx e in
+    let e' = simplify_expr ~indices ~is_guarded:false ctx proj e in
     Quantifier (pos, q, tis, e')
   | e -> e
 (** Assumptions: These constants are arranged in dependency order, 
    all of the constants have been type checked *)
 
-and inline_constants_of_lustre_type ctx ty = match ty with
+and inline_constants_of_lustre_type ctx ty proj = match ty with
   | LA.IntRange (pos, lbound, ubound) ->
     let lbound' = match lbound with 
       | None -> None
-      | Some lbound -> Some (simplify_expr ctx lbound) in
+      | Some lbound -> Some (simplify_expr ctx proj lbound) in
     let ubound' = match ubound with
       | None -> None
-      | Some ubound -> Some (simplify_expr ctx ubound) in
+      | Some ubound -> Some (simplify_expr ctx proj ubound) in
     LA.IntRange (pos, lbound', ubound')
   | LA.TupleType (pos, types) ->
-    let types' = List.map (fun t -> inline_constants_of_lustre_type ctx t) types in
+    let types' = List.map (fun t -> inline_constants_of_lustre_type ctx t proj) types in
     LA.TupleType (pos, types')
   | LA.GroupType (pos, types) ->
-    let types' = List.map (fun t -> inline_constants_of_lustre_type ctx t) types in
+    let types' = List.map (fun t -> inline_constants_of_lustre_type ctx t proj) types in
     LA.GroupType (pos, types')
   | LA.RecordType (pos, name, types) ->
-    let types' = List.map (fun (p, i, t) -> (p, i, inline_constants_of_lustre_type ctx t)) types in
+    let types' = List.map (fun (p, i, t) -> (p, i, inline_constants_of_lustre_type ctx t proj)) types in
     LA.RecordType (pos, name, types')
   | ArrayType (pos, (ty, expr)) ->
-    let ty' = inline_constants_of_lustre_type ctx ty in
-    let expr' = simplify_expr ctx expr in
+    let ty' = inline_constants_of_lustre_type ctx ty proj in
+    let expr' = simplify_expr ctx proj expr in
     ArrayType (pos, (ty', expr'))
   | Map (pos, ty1, ty2) ->
-    let ty1' = inline_constants_of_lustre_type ctx ty1 in
-    let ty2' = inline_constants_of_lustre_type ctx ty2 in
+    let ty1' = inline_constants_of_lustre_type ctx ty1 proj in
+    let ty2' = inline_constants_of_lustre_type ctx ty2 proj in
     Map (pos, ty1', ty2')
   | TArr (pos, ty1, ty2) ->
-    let ty1' = inline_constants_of_lustre_type ctx ty1 in
-    let ty2' = inline_constants_of_lustre_type ctx ty2 in
+    let ty1' = inline_constants_of_lustre_type ctx ty1 proj in
+    let ty2' = inline_constants_of_lustre_type ctx ty2 proj in
     TArr (pos, ty1', ty2')
   | RefinementType (pos, (pos2, id, ty), expr) ->
-    let ty' = inline_constants_of_lustre_type ctx ty in 
-    let expr' = simplify_expr ctx expr in
+    let ty' = inline_constants_of_lustre_type ctx ty proj in 
+    let expr' = simplify_expr ctx proj expr in
     RefinementType (pos, (pos2, id, ty'), expr')
     
   | History _ | Int _ | Bool _ | Real _
   | UserType _ | AbstractType _ | EnumType _ | SBitVector _ | UBitVector _ -> ty
 
+let rec process_lhs ctx proj expr = function
+  | (LA.ArrayDef (_, _, indices) :: tail) ->
+    let expr = simplify_expr ~indices:(List.rev indices) ctx proj expr in
+    process_lhs ctx (proj + 1) expr tail
+  | (SingleIdent _ :: tail) ->
+    let expr = simplify_expr ctx proj expr in
+    process_lhs ctx (proj + 1) expr tail
+  | _ :: _ -> assert false
+  | [] -> expr
 
 let inline_constants_of_node_equation: TC.tc_context -> LA.node_equation -> LA.node_equation
   = fun ctx ->
   function
-  | (LA.Assert (pos, e)) -> (Assert (pos, simplify_expr ctx e))
-  | (LA.Equation (pos, lhs, e)) ->
-    (LA.Equation (pos, lhs, simplify_expr ctx e))
+  | (LA.Assert (pos, e)) -> (Assert (pos, simplify_expr ctx 0 e))
+  | (LA.Equation (pos, (StructDef (_, sis) as lhs), e)) ->
+    (LA.Equation (pos, lhs, process_lhs ctx 0 e sis))
 
 let rec inline_constants_of_const_clocked_type_decl ctx = function
   | [] -> []
   | (pos, id, lustre_type, expr, is_const) :: t ->
-    let lustre_type' = inline_constants_of_lustre_type ctx lustre_type in
+    let lustre_type' = inline_constants_of_lustre_type ctx lustre_type 0 in
     let t' = inline_constants_of_const_clocked_type_decl ctx t in
     (pos, id, lustre_type', expr, is_const) :: t'
 
 let rec inline_constants_of_clocked_type_decl ctx = function
   | [] -> []
   | (pos, id, lustre_type, expr) :: t ->
-    let lustre_type' = inline_constants_of_lustre_type ctx lustre_type in
+    let lustre_type' = inline_constants_of_lustre_type ctx lustre_type 0 in
     let t' = inline_constants_of_clocked_type_decl ctx t in
     (pos, id, lustre_type', expr) :: t'
 
@@ -437,19 +474,19 @@ let rec inline_constants_of_node_locals ctx = function
     let ctx', t' = inline_constants_of_node_locals ctx t in
     ctx', c :: t'
   | (LA.NodeConstDecl (pos1, (UntypedConst (pos2, i, e)))) :: t ->
-    let e' = simplify_expr ctx e in
+    let e' = simplify_expr ctx 0 e in
     let ctx = match (TC.lookup_ty ctx i) with
       | None -> TC.add_untyped_const ctx i e' Local
       | Some ty ->
-        let ty' = inline_constants_of_lustre_type ctx ty in
+        let ty' = inline_constants_of_lustre_type ctx ty 0 in
         TC.add_const ctx i e' ty' Local
     in
     let decl' = LA.NodeConstDecl (pos1, (UntypedConst (pos2, i, e'))) in
     let ctx', t' = inline_constants_of_node_locals ctx t in
     ctx', decl' :: t'
   | (LA.NodeConstDecl (pos1, (LA.TypedConst (pos2, i, e, ty)))) :: t ->
-    let ty' = inline_constants_of_lustre_type ctx ty in
-    let e' = simplify_expr ctx e in
+    let ty' = inline_constants_of_lustre_type ctx ty 0 in
+    let e' = simplify_expr ctx 0 e in
     let ctx' = TC.add_const ctx i e' ty' Local in
     let ctx'', t' = inline_constants_of_node_locals ctx' t in
     let decl' = LA.NodeConstDecl (pos1, (TypedConst (pos2, i, e', ty'))) in
@@ -471,7 +508,7 @@ let rec inline_constants_of_node_items: TC.tc_context -> LA.node_item list -> LA
   | (FrameBlock _) :: _ ->
     assert false
   | (AnnotProperty (pos, n, e, k)) :: items ->
-    (AnnotProperty (pos, n, simplify_expr ctx e, k))
+    (AnnotProperty (pos, n, simplify_expr ctx 0 e, k))
     :: inline_constants_of_node_items ctx items
   | (AnnotMain (pos, b)) :: items
     -> (AnnotMain (pos, b)) :: inline_constants_of_node_items ctx items
@@ -484,24 +521,25 @@ let rec inline_constants_of_contract: TC.tc_context -> LA.contract_node_equation
      (LA.GhostConst (FreeConst (pos, i, ty)))
      :: inline_constants_of_contract ctx others 
   | (LA.GhostConst (UntypedConst (pos, i, e))) :: others ->
-     (LA.GhostConst (UntypedConst (pos, i, simplify_expr ctx e)))
+     (LA.GhostConst (UntypedConst (pos, i, simplify_expr ctx 0 e)))
      :: inline_constants_of_contract ctx others 
   | (LA.GhostConst (TypedConst (pos', i, e, ty))) :: others ->
-     (LA.GhostConst (TypedConst (pos', i, simplify_expr ctx e, ty)))
+     (LA.GhostConst (TypedConst (pos', i, simplify_expr ctx 0 e, ty)))
      :: inline_constants_of_contract ctx others 
   | (LA.GhostVars (pos, lhs, e)) :: others ->
-    (LA.GhostVars (pos, lhs, simplify_expr ctx e))
+    (* contract_eq_lhs does not currently support inductive array definitions *)
+    (LA.GhostVars (pos, lhs, simplify_expr ctx 0 e))
      :: inline_constants_of_contract ctx others 
   | (LA.Assume (pos, n, b, e)) :: others ->
-     (LA.Assume (pos, n, b, simplify_expr ctx e))
+     (LA.Assume (pos, n, b, simplify_expr ctx 0 e))
      :: inline_constants_of_contract ctx others 
   | (LA.Guarantee (pos, n, b, e)) :: others ->
-     (LA.Guarantee (pos, n, b, simplify_expr ctx e))
+     (LA.Guarantee (pos, n, b, simplify_expr ctx 0 e))
      :: inline_constants_of_contract ctx others 
   | (LA.Mode (pos, i, rs, es)) :: others ->
      (LA.Mode (pos, i
-               , List.map (fun (p, s, e) -> (p, s, simplify_expr ctx e)) rs
-               , List.map (fun (p, s, e) -> (p, s, simplify_expr ctx e)) es))
+               , List.map (fun (p, s, e) -> (p, s, simplify_expr ctx 0 e)) rs
+               , List.map (fun (p, s, e) -> (p, s, simplify_expr ctx 0 e)) es))
       :: inline_constants_of_contract ctx others
    (* | (LA.ContractCall) :: others -> () :: inline_constants_of_contract ctx others  *)
   | e -> e 
@@ -509,24 +547,24 @@ let rec inline_constants_of_contract: TC.tc_context -> LA.contract_node_equation
 let substitute: TC.tc_context -> LA.declaration -> (TC.tc_context * LA.declaration) = fun ctx ->
   function
   | TypeDecl (span, AliasType (pos, i, ps, t)) ->
-    let t' = inline_constants_of_lustre_type ctx t in
+    let t' = inline_constants_of_lustre_type ctx t 0 in
     TC.add_ty_syn ctx i t', LA.TypeDecl (span, AliasType (pos, i, ps, t'))
   | ConstDecl (span, FreeConst (pos, id, ty)) ->
-    let ty' = inline_constants_of_lustre_type ctx ty in
+    let ty' = inline_constants_of_lustre_type ctx ty 0 in
     ctx, ConstDecl (span, FreeConst (pos, id, ty'))
   | ConstDecl (span, UntypedConst (pos', i, e)) ->
-    let e' = simplify_expr ctx e in
+    let e' = simplify_expr ctx 0 e in
     (match (TC.lookup_ty ctx i) with
       | None ->
           (TC.add_untyped_const ctx i e' Global
           , ConstDecl (span, UntypedConst (pos', i, e')))
       | Some ty ->
-        let ty' = inline_constants_of_lustre_type ctx ty in
+        let ty' = inline_constants_of_lustre_type ctx ty 0 in
         let ctx' = TC.add_ty (TC.add_const ctx i e' ty' Global) i ty' in
         (ctx', ConstDecl (span, UntypedConst (pos', i, e'))))
   | ConstDecl (span, TypedConst (pos', i, e, ty)) ->
-    let ty' = inline_constants_of_lustre_type ctx ty in
-    let e' = simplify_expr ctx e in
+    let ty' = inline_constants_of_lustre_type ctx ty 0 in
+    let e' = simplify_expr ctx 0 e in
     let ctx' = TC.add_ty (TC.add_const ctx i e' ty' Global) i ty' in
     (ctx', ConstDecl (span, TypedConst (pos', i, e', ty')))
   | (LA.NodeDecl (span, (i, imported, opac, params, ips, ops, ldecls, items, contract))) ->

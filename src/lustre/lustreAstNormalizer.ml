@@ -792,7 +792,7 @@ let add_subrange_constraints info node_id kind vars =
     Ctx.type_contains_subrange info.context ty)
   |> List.fold_left (fun acc (p, id) ->
     let ty = get_type_of_id info node_id id in
-    let ty = AIC.inline_constants_of_lustre_type info.context ty in
+    let ty = AIC.inline_constants_of_lustre_type info.context ty 0 in
     union acc (mk_fresh_subrange_constraint kind info p (Some node_id) id ty))
     (empty ())
 
@@ -801,7 +801,7 @@ let add_ref_type_constraints info kind vars =
   |> List.filter (fun (_, _, ty) -> 
     Ctx.type_contains_ref info.context ty)
   |> List.fold_left (fun acc (p, id, ty) ->
-    let ty = AIC.inline_constants_of_lustre_type info.context ty in
+    let ty = AIC.inline_constants_of_lustre_type info.context ty 0 in
     union acc (mk_fresh_refinement_type_constraint kind info p (A.Ident (p, id)) ty))
     (empty ())
 
@@ -1342,7 +1342,7 @@ and normalize_node info map
       | A.NodeVarDecl (p, (_, id, _, _)) 
       | A.NodeConstDecl (p, TypedConst (_, id, _, _)) ->  
         let ty = get_type_of_id info node_id id in
-        let ty = AIC.inline_constants_of_lustre_type info.context ty in
+        let ty = AIC.inline_constants_of_lustre_type info.context ty 0 in
         let gids = union acc (mk_fresh_subrange_constraint Local info p (Some node_id) id ty)
         in union gids (mk_fresh_refinement_type_constraint Local info p (A.Ident (p, id)) ty)
       | A.NodeConstDecl (_, FreeConst _)
