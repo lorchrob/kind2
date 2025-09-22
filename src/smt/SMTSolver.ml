@@ -43,6 +43,8 @@ module SMTInterpolSMTLIB : SolverSig.S = SMTLIBSolver.Make (SMTInterpolDriver)
 module Yices2SMTLIB : SolverSig.S = SMTLIBSolver.Make (Yices2SMT2Driver)
 module Z3SMTLIB : SolverSig.S = SMTLIBSolver.Make (Z3Driver)
 
+module VampireSMTLIB : SolverSig.S = NonSMTLIBSolver.Make (VampireDriver)
+
 (* SMT expression *)
 type expr = SMTExpr.t
 
@@ -165,6 +167,7 @@ let create_instance
     | `MathSAT_SMTLIB -> (module MathSATSMTLIB.Create(Params) : SolverSig.Inst)
     | `OpenSMT_SMTLIB -> (module OpenSMTSMTLIB.Create(Params) : SolverSig.Inst)
     | `SMTInterpol_SMTLIB -> (module SMTInterpolSMTLIB.Create(Params) : SolverSig.Inst)
+    | `Vampire_SMTLIB -> (module VampireSMTLIB.Create(Params) : SolverSig.Inst)
     | `Yices_native -> (module YicesNative.Create(Params) : SolverSig.Inst)
     | `Yices2_SMTLIB ->  (module Yices2SMTLIB.Create(Params) : SolverSig.Inst)
     | `Z3_SMTLIB -> (module Z3SMTLIB.Create(Params) : SolverSig.Inst)

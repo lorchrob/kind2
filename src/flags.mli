@@ -273,6 +273,7 @@ module Smt : sig
     | `MathSAT_SMTLIB
     | `OpenSMT_SMTLIB
     | `SMTInterpol_SMTLIB
+    | `Vampire_SMTLIB
     | `Yices2_SMTLIB
     | `Yices_native
     | `Z3_SMTLIB
@@ -353,6 +354,9 @@ module Smt : sig
 
   (** Executable of Z3 solver *)
   val z3_bin : unit -> string
+
+  (** Executable of Vampire solver *)
+  val vampire_bin : unit -> string
 
   (** Whether Z3 qe-light strategy is used in addition to qe *)
   val z3_qe_light : unit -> bool

@@ -125,6 +125,7 @@ module Smt = struct
     | `MathSAT_SMTLIB
     | `OpenSMT_SMTLIB
     | `SMTInterpol_SMTLIB
+    | `Vampire_SMTLIB
     | `Yices2_SMTLIB
     | `Yices_native
     | `Z3_SMTLIB
@@ -137,6 +138,7 @@ module Smt = struct
     | "mathsat" ->  `MathSAT_SMTLIB
     | "opensmt" -> `OpenSMT_SMTLIB
     | "smtinterpol" -> `SMTInterpol_SMTLIB
+    | "vampire" -> `Vampire_SMTLIB
     | "yices2" -> `Yices2_SMTLIB
     | "yices" -> `Yices_native
     | "z3" -> `Z3_SMTLIB
@@ -147,13 +149,14 @@ module Smt = struct
     | `MathSAT_SMTLIB -> "MathSAT"
     | `OpenSMT_SMTLIB -> "OpenSMT"
     | `SMTInterpol_SMTLIB -> "SMTInterpol"
+    | `Vampire_SMTLIB -> "Vampire"
     | `Yices2_SMTLIB -> "Yices2"
     | `Yices_native -> "Yices"
     | `Z3_SMTLIB -> "Z3"
     | `detect -> "detect"
 
   (* Suggested order of use (more capabilities, more theories, better performance) *)
-  let solver_values = "Z3, cvc5, Yices2, MathSAT, SMTInterpol, OpenSMT, Bitwuzla, Yices"
+  let solver_values = "Z3, cvc5, Yices2, MathSAT, SMTInterpol, OpenSMT, Bitwuzla, Yices, Vampire"
   let solver_default = `detect
   let solver = ref solver_default
   let _ = add_spec
@@ -382,6 +385,20 @@ module Smt = struct
   let set_bitwuzla_bin str = bitwuzla_bin := str
   let bitwuzla_bin () = !bitwuzla_bin
 
+  (* Vampire binary. *)
+  let vampire_bin_default = "vampire"
+  let vampire_bin = ref vampire_bin_default
+  let _ = add_spec
+    "--vampire_bin"
+    (Arg.Set_string vampire_bin)
+    (fun fmt ->
+      Format.fprintf fmt
+        "@[<v>Executable of Vampire solver@ Default: \"%s\"@]"
+        vampire_bin_default
+    )
+  let set_vampire_bin str = vampire_bin := str
+  let vampire_bin () = ! vampire_bin
+
   (* Z3 binary. *)
   let z3_bin_default = "z3"
   let z3_bin = ref z3_bin_default
@@ -499,6 +516,9 @@ module Smt = struct
         find_solver ~filetype:"JAR" ~fail:true "SMTInterpol" (smtinterpol_jar ())
       in
       set_smtinterpol_jar full_path
+    (* User chose Vampire *)
+    | `Vampire_SMTLIB -> 
+       find_solver ~fail:true "Vampire" (vampire_bin ()) |> ignore
     (* User chose Yices2 *)
     | `Yices2_SMTLIB ->
       find_solver ~fail:true "Yices2 SMT2" (yices2smt2_bin ()) |> ignore
