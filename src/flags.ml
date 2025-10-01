@@ -396,7 +396,6 @@ module Smt = struct
         "@[<v>Executable of Vampire solver@ Default: \"%s\"@]"
         vampire_bin_default
     )
-  let set_vampire_bin str = vampire_bin := str
   let vampire_bin () = ! vampire_bin
 
   (* Z3 binary. *)
