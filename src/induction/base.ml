@@ -380,6 +380,7 @@ let init input_sys aparam trans skip =
       (TransSys.get_logic trans) (Flags.Smt.solver ())
   in
 
+
   (* Defining uf's and declaring variables. *)
   TransSys.define_and_declare_of_bounds
     trans

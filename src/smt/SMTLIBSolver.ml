@@ -1015,8 +1015,9 @@ module Make (Driver : SMTLIBSolverDriver) : SolverSig.S = struct
     (* Print specific headers specifications *)
     List.iter (fun cmd ->
         Debug.smt "%s" cmd;
+        (*!! This is where the header options are executed *)
         match execute_command solver cmd 0 with 
-          | `Success -> () 
+          | `Success -> ()
           | _ -> raise (Failure ("Failed to add header: "^cmd))
     ) headers;
 

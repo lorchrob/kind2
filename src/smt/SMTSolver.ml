@@ -40,10 +40,9 @@ module CVC5SMTLIB : SolverSig.S = SMTLIBSolver.Make (CVC5Driver)
 module MathSATSMTLIB : SolverSig.S = SMTLIBSolver.Make (MathSATDriver)
 module OpenSMTSMTLIB : SolverSig.S = SMTLIBSolver.Make (OpenSMTDriver)
 module SMTInterpolSMTLIB : SolverSig.S = SMTLIBSolver.Make (SMTInterpolDriver)
+module VampireSMTLIB : SolverSig.S = SMTLIBSolver.Make (VampireDriver)
 module Yices2SMTLIB : SolverSig.S = SMTLIBSolver.Make (Yices2SMT2Driver)
 module Z3SMTLIB : SolverSig.S = SMTLIBSolver.Make (Z3Driver)
-
-module VampireSMTLIB : SolverSig.S = NonSMTLIBSolver.Make (VampireDriver)
 
 (* SMT expression *)
 type expr = SMTExpr.t

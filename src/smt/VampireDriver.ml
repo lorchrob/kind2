@@ -47,7 +47,7 @@ let cmd_line
   let timeout = Lib.min_option timeout_global timeout_local in
 
   (*!! update this *)
-  let base_cmd = [| vampire_bin; "--mode"; "smtcomp"; "--input_syntax"; "smtlib2"; |] in
+  let base_cmd = [| vampire_bin; |] in
   match timeout with
   | None -> base_cmd
   | Some timeout ->
