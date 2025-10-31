@@ -101,6 +101,10 @@ type warning = [
 
 let mk_warning pos kind = `LustreAstNormalizerWarning (pos, kind)
 
+(* We need a special node ID to distinguish generated identifiers for global constants 
+   in the node ID -> gids map returned by `normalize` *)
+let global_node_id = NI.mk_node_id (HString.mk_hstring "._global")
+
 let unwrap result = match result with
   | Ok r -> r
   | Error e ->
@@ -1189,14 +1193,17 @@ and normalize_declaration info map = function
     let map = NI.Map.add id ngids map in
     None, map, warnings
   | ConstDecl (p, FreeConst (p2, id, ty)) ->
-    let ty, _, warnings = normalize_ty info None map id ty in 
+    let ty, gids, warnings = normalize_ty info None map id ty in 
+    let map = NI.Map.add global_node_id gids map in
     Some (A.ConstDecl (p, FreeConst (p2, id, ty))), map, warnings 
   | ConstDecl (p, TypedConst (p2, id, expr, ty)) ->
-    let ty, _, warnings1 = normalize_ty info None map id ty in 
-    let expr, _, warnings2 = normalize_expr info None map expr in 
+    let ty, gids1, warnings1 = normalize_ty info None map id ty in 
+    let expr, gids2, warnings2 = normalize_expr info None map expr in 
+    let map = NI.Map.add global_node_id (union gids1 gids2) map in
     Some (A.ConstDecl (p, TypedConst (p2, id, expr, ty))), map, warnings1 @ warnings2
   | ConstDecl (p, UntypedConst (p2, id, expr)) ->
-    let expr, _, warnings = normalize_expr info None map expr in 
+    let expr, gids, warnings = normalize_expr info None map expr in 
+    let map = NI.Map.add global_node_id gids map in
     Some (A.ConstDecl (p, UntypedConst (p2, id, expr))), map, warnings
   | decl -> Some decl, map, []
 
