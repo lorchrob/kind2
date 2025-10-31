@@ -2324,28 +2324,37 @@ and normalize_expr ?guard info (node_id : NI.t option) map =
       let nexpr2, gids2, warnings2 = normalize_expr ?guard info node_id map expr2 in
       BinaryOp (pos, op, nexpr1, nexpr2), union gids1 gids2, warnings1 @ warnings2
     )
-  | BinaryOp (pos, ((Union | Intersection) as op), expr1, expr2) -> 
-    let nexpr1, gids1, warnings1 = normalize_expr info node_id map expr1 in 
-    let nexpr2, gids2, warnings2 = normalize_expr info node_id map expr2 in 
-    i := !i + 1; 
-    let prefix = HString.mk_hstring (string_of_int !i) in 
-    let name1 = HString.concat2 prefix (HString.mk_hstring "_set_union") in 
-    let name2 = HString.concat2 prefix (HString.mk_hstring "_idx") in 
-    let ty = match Chk.infer_type_expr info.context node_id expr1 with 
-    | Ok (ty, _) -> (
-      match Chk.expand_type_syn_reftype_history_subrange info.context ty with 
-      | Ok (Set (_, ty)) -> ty 
-      | _ -> assert false
+  | BinaryOp (pos, ((Union | Intersection) as op), expr1, expr2) -> (
+    match op, AH.eval_to_concrete_set expr1, AH.eval_to_concrete_set expr2 with 
+    | A.Union, Some concrete_set, _ -> 
+      let expr = AH.desugar_to_adding_elements expr2 concrete_set in 
+      normalize_expr ?guard info node_id map expr 
+    | A.Union, _, Some concrete_set ->
+      let expr = AH.desugar_to_adding_elements expr1 concrete_set in 
+      normalize_expr ?guard info node_id map expr 
+    | _ ->
+      let nexpr1, gids1, warnings1 = normalize_expr info node_id map expr1 in 
+      let nexpr2, gids2, warnings2 = normalize_expr info node_id map expr2 in 
+      i := !i + 1; 
+      let prefix = HString.mk_hstring (string_of_int !i) in 
+      let name1 = HString.concat2 prefix (HString.mk_hstring "_set_union") in 
+      let name2 = HString.concat2 prefix (HString.mk_hstring "_idx") in 
+      let ty = match Chk.infer_type_expr info.context node_id expr1 with 
+      | Ok (ty, _) -> (
+        match Chk.expand_type_syn_reftype_history_subrange info.context ty with 
+        | Ok (Set (_, ty)) -> ty 
+        | _ -> assert false
+      )
+      | Error _ -> assert false 
+      in 
+      let gids3 = { (empty ()) with   
+        set_binops = [ name1, nexpr1, nexpr2, name2, op, ty ]; 
+        locals = StringMap.add name2 ty (StringMap.singleton name1 (A.Set (pos, ty)));
+      } in 
+      let nexpr = A.Ident (pos, name1) in 
+      let gids = List.fold_left union (empty ()) [gids1; gids2; gids3] in 
+      nexpr, gids, warnings1 @ warnings2
     )
-    | Error _ -> assert false 
-    in 
-    let gids3 = { (empty ()) with   
-      set_binops = [ name1, nexpr1, nexpr2, name2, op, ty ]; 
-      locals = StringMap.add name2 ty (StringMap.singleton name1 (A.Set (pos, ty)));
-    } in 
-    let nexpr = A.Ident (pos, name1) in 
-    let gids = List.fold_left union (empty ()) [gids1; gids2; gids3] in 
-    nexpr, gids, warnings1 @ warnings2
   | BinaryOp (pos, op, expr1, expr2) ->
     let nexpr1, gids1, warnings1 = normalize_expr ?guard info node_id map expr1 in
     let nexpr2, gids2, warnings2 = normalize_expr ?guard info node_id map expr2 in
