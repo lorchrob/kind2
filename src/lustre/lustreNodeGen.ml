@@ -621,8 +621,9 @@ let compile_contract_item map count scope kind pos name expr =
     contract_sv
 
 let rec compile ctx gids decls =
+  let cstate = compile_global_gids (empty_compiler_state ()) gids ctx in
   let over_decls cstate decl = compile_declaration cstate gids ctx decl in
-  let output = List.fold_left over_decls (empty_compiler_state ()) decls in 
+  let output = List.fold_left over_decls cstate decls in 
   let free_constants = output.free_constants
     |> List.map (fun (_, id, v) -> mk_ident id, v)
     
@@ -2700,7 +2701,6 @@ and compile_node_decl gids_map is_function opac cstate ctx node_id ext params in
     nodes = node :: cstate.nodes;
   }
 
-
 and compile_const_decl cstate ctx map scope = function
   | A.FreeConst (p, i, ty) -> (
     let ident = mk_ident i in
@@ -2776,6 +2776,41 @@ and compile_type_decl pos ctx cstate = function
     let type_alias = StringMap.add ident t cstate.type_alias in
     { cstate with
       type_alias }
+
+(*!! Also need the definitions of the global gids from gids.equations *)
+and compile_global_gids: compiler_state -> GI.t NI.Map.t -> Ctx.tc_context -> compiler_state 
+= fun cstate gids_map ctx -> 
+  let gids = match NI.Map.find_opt AN.global_node_id gids_map with 
+  | Some gids -> gids 
+  | None -> GI.empty () 
+  in
+  let map = ref (empty_identifier_maps None) in
+  List.fold_left (fun cstate (i, ty) -> 
+    let ident = mk_ident i in
+    let cty = compile_ast_type cstate ctx map ty in
+    let over_index = fun i ty vt ->
+      let possible_state_var = mk_state_var
+        ?is_input:(Some false)
+        ?is_const:(Some true)
+        ?for_inv_gen:(Some true)
+        map
+        I.reserved_scope
+        ident
+        i
+        ty
+        None
+      in
+      match possible_state_var with
+      | Some state_var ->
+        X.add i (Var.mk_const_state_var state_var) vt
+      | None -> vt
+    in
+    let vt = X.fold over_index cty X.empty in
+    let var_bounds = SVT.fold (fun k v a -> (k, v) :: a) !map.bounds [] in
+    List.iter (fun (k, v) -> SVT.add cstate.state_var_bounds k v) var_bounds;
+    { cstate with
+      free_constants = (!map.node_name, i, vt) :: cstate.free_constants;
+    }) cstate (StringMap.bindings gids.locals)
 
 and compile_declaration: compiler_state -> GI.t NI.Map.t -> Ctx.tc_context ->
                          A.declaration -> compiler_state

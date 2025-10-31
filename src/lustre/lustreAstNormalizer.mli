@@ -82,6 +82,8 @@ val warning_message : warning_kind -> string
 
 val error_if_lus_strict : warning_kind -> bool
 
+val global_node_id : NodeId.t 
+
 val mk_fresh_dummy_index : 'a -> HString.t
 
 val mk_enum_range_expr :

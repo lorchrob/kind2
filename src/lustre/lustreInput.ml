@@ -231,7 +231,7 @@ let type_check declarations =
     let* (normalized_nodes_and_contracts, gids, warnings6) =
       LAN.normalize inlined_global_ctx abstract_interp_ctx inlinable_funcs const_inlined_nodes_and_contracts gids
     in
-    let* (normalized_type_and_consts, _, warnings7) =
+    let* (normalized_type_and_consts, gids, warnings7) =
       LAN.normalize inlined_global_ctx abstract_interp_ctx inlinable_funcs const_inlined_type_and_consts gids
     in
     
