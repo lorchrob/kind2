@@ -2777,7 +2777,6 @@ and compile_type_decl pos ctx cstate = function
     { cstate with
       type_alias }
 
-(*!! Also need the definitions of the global gids from gids.equations *)
 and compile_global_gids: compiler_state -> GI.t NI.Map.t -> Ctx.tc_context -> compiler_state 
 = fun cstate gids_map ctx -> 
   let gids = match NI.Map.find_opt AN.global_node_id gids_map with 
@@ -2785,7 +2784,8 @@ and compile_global_gids: compiler_state -> GI.t NI.Map.t -> Ctx.tc_context -> co
   | None -> GI.empty () 
   in
   let map = ref (empty_identifier_maps None) in
-  List.fold_left (fun cstate (i, ty) -> 
+  (* Add declarations for global generated constants *)
+  let cstate = List.fold_left (fun cstate (i, ty) -> 
     let ident = mk_ident i in
     let cty = compile_ast_type cstate ctx map ty in
     let over_index = fun i ty vt ->
@@ -2810,7 +2810,37 @@ and compile_global_gids: compiler_state -> GI.t NI.Map.t -> Ctx.tc_context -> co
     List.iter (fun (k, v) -> SVT.add cstate.state_var_bounds k v) var_bounds;
     { cstate with
       free_constants = (!map.node_name, i, vt) :: cstate.free_constants;
-    }) cstate (StringMap.bindings gids.locals)
+    } 
+  ) cstate (StringMap.bindings gids.locals) in 
+  (* Add constraints defining global generated constants *)
+  (*!! Ideally we would combine these two folds with a single define-fun 
+       (rather than declare-fun and assert equality *)
+  List.fold_left (fun cstate (i, ty) -> 
+    let equality_constraint = List.find_map (fun (id, e1, e2, idx, op, _) -> 
+      if HString.equal i id then 
+        let op' = match op with 
+        | A.Union -> A.Or 
+        | A.Intersection -> And 
+        | _ -> assert false
+        in
+        let idx = A.Ident (dummy_pos, idx) in
+        Some (A.BinaryOp (dummy_pos, op', 
+          A.BinaryOp (dummy_pos, In Set, idx, e1), 
+          A.BinaryOp (dummy_pos, In Set, idx, e2)))
+      else None 
+    ) gids.set_binops in
+    match equality_constraint with 
+    | None -> cstate
+    | Some equality_constraint -> 
+      (*!!let global_constraint =
+        let c_expr = compile_ast_expr cstate ctx [] map equality_constraint in
+        X.max_binding c_expr |> snd
+      in
+      { cstate with
+        global_constraints = global_constraint :: cstate.global_constraints;
+      }*)
+      cstate
+  ) cstate (GI.StringMap.bindings gids.locals)
 
 and compile_declaration: compiler_state -> GI.t NI.Map.t -> Ctx.tc_context ->
                          A.declaration -> compiler_state
