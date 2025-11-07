@@ -622,10 +622,11 @@ let compile_contract_item map count scope kind pos name expr =
 
 let rec compile ctx gids decls =
   let over_decls cstate decl = compile_declaration cstate gids ctx decl in
-  let cstate = List.fold_left over_decls (empty_compiler_state ()) decls in 
+  let cstate = compile_global_gid_locals (empty_compiler_state ()) gids ctx in
+  let cstate = List.fold_left over_decls cstate decls in 
   (*!! Problem: There are mutual references between global constants and gids. 
        So we have to sort everything and compile in the right order, somehow... *)
-  let output = compile_global_gids cstate gids ctx in
+  let output = compile_global_gid_eqs cstate gids ctx in
   let free_constants = output.free_constants
     |> List.map (fun (_, id, v) -> mk_ident id, v)
     
@@ -815,8 +816,6 @@ and compile_ast_expr
   : LustreExpr.t LustreIndex.t = 
 
   let rec compile_id_string bounds id_str =
-    Format.printf "Trying to compile %a\n"
-      HString.pp_print_hstring id_str;
     let ident = mk_ident id_str in
     try
       H.find !map.quant_vars ident
@@ -2781,18 +2780,15 @@ and compile_type_decl pos ctx cstate = function
     { cstate with
       type_alias }
 
-and compile_global_gids: compiler_state -> GI.t NI.Map.t -> Ctx.tc_context -> compiler_state 
+and compile_global_gid_locals: compiler_state -> GI.t NI.Map.t -> Ctx.tc_context -> compiler_state 
 = fun cstate gids_map ctx -> 
-  Format.printf "Compiling global gids\n";
   let gids = match NI.Map.find_opt AN.global_node_id gids_map with 
   | Some gids -> gids 
   | None -> GI.empty () 
   in
   let map = ref (empty_identifier_maps None) in
   (* Add declarations for global generated constants *)
-  let cstate = List.fold_left (fun cstate (i, ty) -> 
-    Format.printf "Processing %a\n"
-      HString.pp_print_hstring i;
+  List.fold_left (fun cstate (i, ty) -> 
     let ident = mk_ident i in
     let cty = compile_ast_type cstate ctx map ty in
     let over_index = fun i ty vt ->
@@ -2820,14 +2816,16 @@ and compile_global_gids: compiler_state -> GI.t NI.Map.t -> Ctx.tc_context -> co
     { cstate with
       free_constants = (!map.node_name, i, vt) :: cstate.free_constants;
     } 
-  ) cstate (StringMap.bindings gids.locals) in 
-  (* Add constraints defining global generated constants *)
-  (*!! Ideally we would combine these two folds with a single define-fun 
-       (rather than declare-fun and assert equality *)
+  ) cstate (StringMap.bindings gids.locals) 
+
+and compile_global_gid_eqs: compiler_state -> GI.t NI.Map.t -> Ctx.tc_context -> compiler_state 
+= fun cstate gids_map ctx -> 
+  let gids = match NI.Map.find_opt AN.global_node_id gids_map with 
+  | Some gids -> gids 
+  | None -> GI.empty () 
+  in
+  let map = ref (empty_identifier_maps None) in
   List.fold_left (fun cstate (i, ty) -> 
-  let free_constants = cstate.free_constants |> List.map (fun (_, i, _) -> i) in 
-  Format.printf "Free constants: %a\n"
-    (Lib.pp_print_list HString.pp_print_hstring ", ") free_constants;
     let equality_constraint = List.find_map (fun (id, e1, e2, idx, op, _) -> 
       if HString.equal i id then 
         let op' = match op with 
@@ -2836,16 +2834,20 @@ and compile_global_gids: compiler_state -> GI.t NI.Map.t -> Ctx.tc_context -> co
         | _ -> assert false
         in
         let idx = A.Ident (dummy_pos, idx) in
-        Some (A.BinaryOp (dummy_pos, op', 
+        let set_op_def = 
+        A.BinaryOp (dummy_pos, op', 
           A.BinaryOp (dummy_pos, In Set, idx, e1), 
-          A.BinaryOp (dummy_pos, In Set, idx, e2)))
+          A.BinaryOp (dummy_pos, In Set, idx, e2)) in
+        Some (A.CompOp (dummy_pos, Eq, A.Ident (dummy_pos, i), set_op_def)) 
       else None 
     ) gids.set_binops in
+    (*!! We need to handle this equality constraint properly as an equation, with indices 
+         and so on... *)
     match equality_constraint with 
     | None -> cstate
     | Some equality_constraint -> 
       let global_constraint =
-        Format.printf "expr: %a\n"
+        Format.printf "Global constraint: %a\n"
           A.pp_print_expr equality_constraint;
         let c_expr = compile_ast_expr cstate ctx [] map equality_constraint in
         X.max_binding c_expr |> snd
