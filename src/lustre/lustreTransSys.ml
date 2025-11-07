@@ -2566,6 +2566,8 @@ let rec trans_sys_of_node' options globals top_name analysis_param
               ) [] globals.G.free_constants
             |> List.rev
           in
+
+          (*!! add global_defs like global_consts but with exprs *)
           
           let global_const_svars =
             List.map Var.state_var_of_state_var_instance global_consts

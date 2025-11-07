@@ -103,6 +103,8 @@ type t =
     
     global_constraints : Term.t list;
 
+    (**!! global_defs : (Var.t * Term.t) list *)
+
     state_vars : StateVar.t list;
     (** State variables in the scope of this transition system 
 
