@@ -2371,6 +2371,54 @@ and normalize_expr ?guard info (node_id : NI.t option) map =
   | ConvOp (pos, op, expr) ->
     let nexpr, gids, warnings = normalize_expr ?guard info node_id map expr in
     ConvOp (pos, op, nexpr), gids, warnings
+  | CompOp (pos, A.Eq, expr1, expr2) ->
+    let ty, _ = Chk.infer_type_expr info.context node_id expr1 |> unwrap in (
+    match ty with 
+    | A.ArrayType (_, (_, len)) -> 
+    (* Arrays: for all i in range, expr1[i] = expr2[i] *)
+      i := !i + 1;
+      let prefix = HString.mk_hstring (string_of_int !i) in
+      let id = HString.concat2 prefix (HString.mk_hstring "_idx") in
+      let id_e = A.Ident (pos, id) in 
+      let expr1 = A.IndexAccess (pos, expr1, id_e, A.Array) in 
+      let expr2 = A.IndexAccess (pos, expr2, id_e, A.Array) in 
+      let lb = A.Const (pos, A.Num (HString.mk_hstring "0")) in
+      let range_ty = 
+        A.RefinementType (pos, (pos, id, A.Int pos), 
+          A.BinaryOp (pos, A.And, A.CompOp (pos, A.Lte, lb, id_e), A.CompOp (pos, A.Lt, id_e, len)))
+      in
+      let expr = A.Quantifier (pos, A.Forall, [(pos, id, range_ty)], A.CompOp (pos, A.Eq, expr1, expr2)) in
+      normalize_expr ?guard info node_id map expr 
+    | A.Set (_, ty) -> 
+      (* Sets: for all i of key type, i in expr1 = i in expr2 *)
+      i := !i + 1;
+      let prefix = HString.mk_hstring (string_of_int !i) in
+      let id = HString.concat2 prefix (HString.mk_hstring "_idx") in
+      let id_e = A.Ident (pos, id) in
+      let expr1 = A.BinaryOp (pos, A.In Set, id_e, expr1) in
+      let expr2 = A.BinaryOp (pos, A.In Set, id_e, expr2) in
+      let expr = A.Quantifier (pos, A.Forall, [(pos, id, ty)], A.CompOp (pos, A.Eq, expr1, expr2)) in
+      normalize_expr ?guard info node_id map expr 
+    | A.Map (_, kt, vt) -> 
+      (* Maps: for all i of key type, i in expr1 = i in expr2 and expr1[i] = expr2[i] *) 
+      i := !i + 1;
+      let prefix = HString.mk_hstring (string_of_int !i) in
+      let id = HString.concat2 prefix (HString.mk_hstring "_idx") in
+      let id_e = A.Ident (pos, id) in
+      let expr1' = A.BinaryOp (pos, A.In Map, id_e, expr1) in
+      let expr2' = A.BinaryOp (pos, A.In Map, id_e, expr2) in
+      let expr3 = A.IndexAccess (pos, expr1, id_e, A.Map) in 
+      let expr4 = A.IndexAccess (pos, expr2, id_e, A.Map) in 
+      let c1 = A.CompOp (pos, Eq, expr1', expr2') in 
+      let c2 = A.CompOp (pos, Eq, expr3, expr4) in
+      let expr = A.Quantifier (pos, A.Forall, [(pos, id, kt)], A.BinaryOp (pos, A.And, c1, c2)) in
+      normalize_expr ?guard info node_id map expr 
+    | ty ->
+      (* Just like standard CompOp case *)
+      let nexpr1, gids1, warnings1 = normalize_expr ?guard info node_id map expr1 in
+      let nexpr2, gids2, warnings2 = normalize_expr ?guard info node_id map expr2 in
+      CompOp (pos, A.Eq, nexpr1, nexpr2), union gids1 gids2, warnings1 @ warnings2
+    )
   | CompOp (pos, op, expr1, expr2) ->
     let nexpr1, gids1, warnings1 = normalize_expr ?guard info node_id map expr1 in
     let nexpr2, gids2, warnings2 = normalize_expr ?guard info node_id map expr2 in

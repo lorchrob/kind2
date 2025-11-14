@@ -2253,11 +2253,20 @@ and compile_node_decl gids_map is_function opac cstate ctx node_id ext params in
   let gequations = gequations @ empty_map_eqs in
   let map_element_update_eqs = 
     let over_map_element_updates acc (id, nexpr1, nexpr2, nexpr3, fresh_idx_name, _, _) =
+      (* Desugar to if nexpr2 = fresh_idx then {true, nexpr3} else {fresh_idx in nexpr1, nexpr1[fresh_idx]} *)
+      Format.printf "nexpr2: %a, fresh_idx_name: %a\n"
+        A.pp_print_expr nexpr2 
+        HString.pp_print_hstring fresh_idx_name;
       let fresh_idx = A.Ident (dummy_pos, fresh_idx_name) in 
       let eq_lhs, indexes = compile_map_def id [fresh_idx_name] false in 
       let lhs_bounds = gen_lhs_bounds (AH.pos_of_expr nexpr1) true eq_lhs indexes in
       let nexpr2 = compile_ast_expr cstate ctx lhs_bounds map nexpr2 in 
+      Format.printf "lhs_bounds: %a\n" 
+        (Lib.pp_print_list E.pp_print_bound_or_fixed ", ") lhs_bounds;
       let fresh_idx_e = compile_ast_expr cstate ctx lhs_bounds map fresh_idx in 
+      Format.printf "nexpr2: %a\nfresh_idx_e: %a\n" 
+        (X.pp_print_trie_expr true) nexpr2 
+        (X.pp_print_trie_expr true) fresh_idx_e ;
       (* Flatten nexpr2 to make the indices align (the compilation of map types in 
          compile_ast_type flattens indices, so we need to do a corresponding flattening 
          of nexpr2 to compile the equality between nexpr2 and fresh_idx_e) *)
@@ -2267,6 +2276,9 @@ and compile_node_decl gids_map is_function opac cstate ctx node_id ext params in
           X.add [X.TupleIndex acc_i] e acc, acc_i + 1
         ) (X.empty, 0) nexpr2 |> fst 
       in
+      Format.printf "nexpr2: %a\nfresh_idx_e: %a\n" 
+        (X.pp_print_trie_expr true) nexpr2 
+        (X.pp_print_trie_expr true) fresh_idx_e ;
       let expr = compile_binary' E.mk_eq nexpr2 fresh_idx_e in
       let cond_expr = 
         X.singleton X.empty_index (List.fold_left E.mk_and E.t_true (X.values expr)) 

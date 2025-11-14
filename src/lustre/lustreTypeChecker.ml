@@ -1500,13 +1500,7 @@ and infer_type_comp_op: tc_context -> NI.t option -> Lib.position -> LA.expr -> 
   match op with
   | Neq  | Eq ->
     R.ifM (eq_lustre_type ctx ty1 ty2)
-      (if type_contains_array ctx ty1  then
-         type_error pos (Unsupported "Extensional array equality is not supported")
-       else if type_contains_map_or_set ctx ty1 then 
-         type_error pos (Unsupported "Extensional map and set equality are not supported") 
-       else 
-         R.ok (LA.Bool pos, warnings1 @ warnings2)
-      )
+         (R.ok (LA.Bool pos, warnings1 @ warnings2))
       (type_error pos (UnificationFailed (ty1, ty2)))
   | Lte  | Lt  | Gte | Gt ->
     are_args_num ctx pos ty1 ty2
@@ -2190,11 +2184,10 @@ and check_map_type pos ctx ty = let r = check_map_type pos ctx in match ty with
 and check_type_well_formed: tc_context -> source -> NI.t option -> bool -> tc_type -> ([> warning] list, [> error]) result
   = fun ctx src nname is_const ->
   function
-  | LA.Map (pos, ty1, ty2) ->
-    let* _ = check_map_type pos ctx ty1 in 
-    let* _ = check_map_type pos ctx ty2 in
-    let* warnings1 = check_type_well_formed ctx src nname is_const ty1 in
-    let* warnings2 = check_type_well_formed ctx src nname is_const ty2 in 
+  | LA.Map (pos, kt, vt) ->
+    let* _ = check_map_type pos ctx kt in 
+    let* warnings1 = check_type_well_formed ctx src nname is_const kt in
+    let* warnings2 = check_type_well_formed ctx src nname is_const vt in 
     R.ok (warnings1 @ warnings2)
   | LA.Set (_, ty) -> 
     check_type_well_formed ctx src nname is_const ty 
