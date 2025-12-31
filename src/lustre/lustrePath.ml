@@ -465,6 +465,7 @@ let node_path_of_instance
     const_map
     first_is_init
     model_top
+    fmt_trans_sys
     ({
       N.inputs; N.outputs; N.locals; N.contract
     } as node)
@@ -477,8 +478,7 @@ let node_path_of_instance
   (* Record trace of node calls *)
   let trace = 
     List.map
-      (fun (t, { T.pos }, _) -> 
-         (TransSys.scope_of_trans_sys t |> I.of_scope, pos))
+      (fun (t, { T.pos }, _) -> fmt_trans_sys t, pos)
       instances
   in
 
@@ -586,6 +586,7 @@ let node_path_of_instance
 let node_path_of_subsystems
     globals
     first_is_init
+    fmt_trans_sys
     trans_sys
     model
     ({ S.scope } as subsystems) =
@@ -643,7 +644,7 @@ let node_path_of_subsystems
       (* Create models for all subnodes *)
       N.fold_node_calls_with_trans_sys
         nodes
-        (node_path_of_instance const_map first_is_init model)
+        (node_path_of_instance const_map first_is_init model fmt_trans_sys)
         (N.node_of_scope (I.of_scope scope) nodes)
         trans_sys'
     in
@@ -1150,11 +1151,11 @@ let pp_print_lustre_path_pt ppf (lustre_path, const_map) =
 
 (* Output a hierarchical model as plain text *)
 let pp_print_path_pt
-  trans_sys globals subsystems first_is_init ppf model
+  fmt_trans_sys trans_sys globals subsystems first_is_init ppf model
   =
   (* Create the hierarchical model *)
   node_path_of_subsystems
-    globals first_is_init trans_sys model subsystems
+    globals first_is_init fmt_trans_sys trans_sys model subsystems
   (* Output as plain text *)
   |> pp_print_lustre_path_pt ppf
 
@@ -1472,11 +1473,11 @@ let pp_print_lustre_path_xml ppf (path, const_map) =
 
 (* Ouptut a hierarchical model as XML *)
 let pp_print_path_xml
-  trans_sys globals subsystems first_is_init ppf model
+  fmt_trans_sys trans_sys globals subsystems first_is_init ppf model
 =
   (* Create the hierarchical model *)
   node_path_of_subsystems
-    globals first_is_init trans_sys model subsystems
+    globals first_is_init fmt_trans_sys trans_sys model subsystems
   (* Output as XML *)
   |> pp_print_lustre_path_xml ppf
 
@@ -1841,11 +1842,11 @@ let pp_print_lustre_path_json ppf (path, const_map) =
 
 (* Ouptut a hierarchical model as JSON *)
 let pp_print_path_json
-  trans_sys globals subsystems first_is_init ppf model
+  fmt_trans_sys trans_sys globals subsystems first_is_init ppf model
 =
   (* Create the hierarchical model *)
   node_path_of_subsystems
-    globals first_is_init trans_sys model subsystems
+    globals first_is_init fmt_trans_sys trans_sys model subsystems
   (* Output as JSON *)
   |> pp_print_lustre_path_json ppf
 
@@ -1890,11 +1891,11 @@ let pp_print_lustre_path_in_csv ppf = function
 
 (* Outputs a model for the inputs of a system in CSV. *)
 let pp_print_path_in_csv
-  trans_sys globals subsystems first_is_init ppf model
+  fmt_trans_sys trans_sys globals subsystems first_is_init ppf model
 =
   (* Create the hierarchical model. *)
   node_path_of_subsystems 
-    globals first_is_init trans_sys model subsystems
+    globals first_is_init fmt_trans_sys trans_sys model subsystems
   (* Output as CSV. *)
   |> pp_print_lustre_path_in_csv ppf
 

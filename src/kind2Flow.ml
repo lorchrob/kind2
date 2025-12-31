@@ -37,7 +37,12 @@ open ProcessCall
 (* |===| Helpers. *)
 
 (** TSys name formatter. *)
-let fmt_sys = TSys.pp_print_trans_sys_name
+let fmt_sys in_sys ppf sys = 
+  match ISys.get_lustre_node in_sys (TSys.scope_of_trans_sys sys) with 
+  | Some node -> 
+    NodeId.pp_print_node_id_user_name ppf node.node_id
+  | None -> 
+    TSys.pp_print_trans_sys_name ppf sys 
 
 (* |===| Helpers to run stuff. *)
 
@@ -602,7 +607,7 @@ let analyze msg_setup save_results ignore_props stop_if_falsified slice_to_prop 
 
   ( if TSys.has_real_properties sys |> not && not ignore_props then
       KEvent.log L_note
-        "System %a has no property, skipping verification step." fmt_sys sys
+        "System %a has no property, skipping verification step." (fmt_sys in_sys) sys 
     else
       let props = TSys.props_list_of_bound sys Num.zero in
       (* Issue analysis start notification. *)

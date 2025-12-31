@@ -437,6 +437,13 @@ let get_lustre_node (type s) (input_system : s t) scope =
   | Native _ -> None
   | Horn _ -> None
 
+let fmt_sys in_sys sys = 
+  match get_lustre_node in_sys (TransSys.scope_of_trans_sys sys) with 
+  | Some node -> 
+    NodeId.get_user_name node.N.node_id |> LustreIdent.of_hstring
+  | None -> 
+    TransSys.scope_of_trans_sys sys |> LustreIdent.of_scope
+
 let get_node_internal_name in_sys scope = 
   match get_lustre_node in_sys scope with 
   | Some node -> NodeId.get_internal_name node.node_id |> LustreIdent.of_hstring
@@ -538,7 +545,7 @@ let pp_print_path_pt
       S.find_subsystem_of_list main_subs scope
     in
     LustrePath.pp_print_path_pt
-      trans_sys globals sub first_is_init ppf model
+      (fmt_sys input_system) trans_sys globals sub first_is_init ppf model
 
   | Moxi _ ->
     Format.eprintf "pp_print_path_pt not implemented for MoXI input@.";
@@ -563,7 +570,7 @@ let pp_print_path_xml
       S.find_subsystem_of_list main_subs scope
     in
     LustrePath.pp_print_path_xml
-      trans_sys globals sub first_is_init ppf model
+      (fmt_sys input_system) trans_sys globals sub first_is_init ppf model
 
   | Moxi _ ->
     Format.eprintf "pp_print_path_xml not implemented for MoXI input@.";
@@ -588,7 +595,7 @@ let pp_print_path_json
       S.find_subsystem_of_list main_subs scope
     in
     LustrePath.pp_print_path_json
-      trans_sys globals sub first_is_init ppf model
+      (fmt_sys input_system) trans_sys globals sub first_is_init ppf model
 
   | Moxi _ ->
     Format.eprintf "pp_print_path_json not implemented for MoXI input@.";
@@ -611,7 +618,7 @@ let pp_print_path_in_csv
       S.find_subsystem_of_list main_subs scope
     in
     LustrePath.pp_print_path_in_csv
-      trans_sys globals sub first_is_init ppf model
+      (fmt_sys input_system) trans_sys globals sub first_is_init ppf model
 
   | Moxi _ ->
     Format.eprintf "pp_print_path_in_csv not implemented for MoXI input";
