@@ -111,7 +111,7 @@ let rec fill_ite_helper frame_pos node_id lhs fill e =
 
   (* Everything else is just recursing to find Idents *)
   | Pre (p, e, ta) -> Pre (p, r e, ta) 
-  | Arrow (p, e1, e2) -> Arrow (p, r e1, r e2)
+  | Arrow (p, e1, e2, ta) -> Arrow (p, r e1, r e2, ta)
   | Const _ as e -> e
   | ModeRef _ as e -> e
   | EmptyMap _ as e -> e
@@ -191,7 +191,7 @@ let generate_undefined_nes f_pos node_id nis ne = match ne with
         in
         NI.Hashtbl.add pos_list_map node_id frame_info;
 
-        R.ok [A.Body(A.Equation(pos, lhs, Arrow(pos2, init, Pre(pos2, Ident (pos2, id), None))))]
+        R.ok [A.Body(A.Equation(pos, lhs, Arrow(pos2, init, Pre(pos2, Ident (pos2, id), None), None)))]
     )
   | A.Equation (pos, (StructDef(_, [ArrayDef(_, id1, id2)]) as lhs), init) -> 
     (* Find the corresponding node item in frame block body. *)
@@ -220,7 +220,7 @@ let generate_undefined_nes f_pos node_id nis ne = match ne with
         in
         NI.Hashtbl.add pos_list_map node_id frame_info;
 
-        R.ok [A.Body(A.Equation(pos, lhs, Arrow(pos2, init, Pre(pos2, build_array_index (List.rev id2), None))))]
+        R.ok [A.Body(A.Equation(pos, lhs, Arrow(pos2, init, Pre(pos2, build_array_index (List.rev id2), None), None)))]
     )
   (* Assert in frame block guard *)
   | A.Assert(pos, _) -> mk_error pos (MisplacedNodeItemError (A.Body ne))
@@ -324,7 +324,7 @@ match ni with
         let pos2 = AH.pos_of_expr rhs_expr in 
         let rhs = 
           fill_ite_helper f_pos node_id lhs 
-            (A.Arrow (pos2, init, pre_expr)) rhs_expr
+            (A.Arrow (pos2, init, pre_expr, None)) rhs_expr
         in
         R.ok (A.Body (Equation (pos, lhs, rhs))) 
       | None -> 
@@ -361,7 +361,7 @@ match ni with
       | Some init -> 
         let rhs = 
           fill_ite_helper f_pos node_id lhs 
-            (A.Arrow (pos2, init, (A.Pre (pos2, array_index, None)))) rhs_expr
+            (A.Arrow (pos2, init, (A.Pre (pos2, array_index, None)), None)) rhs_expr
         in
         R.ok (A.Body (Equation (pos, lhs, rhs)))
       | None -> 

@@ -235,7 +235,7 @@ and process_expr ind_vars ctx ns proj indices expr =
     union_ (r e) graph
   (* Temporal operators *)
   | Pre _ -> empty_
-  | Arrow (_, e1, e2) -> union_ (r e1) (r e2)
+  | Arrow (_, e1, e2, _) -> union_ (r e1) (r e2)
   (* Node calls *)
   | Call (_, _, i, es) ->
     let arg_vars = List.map (process_expr ind_vars ctx ns 0 indices) es in

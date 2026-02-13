@@ -581,7 +581,7 @@ let no_calls_to_node scope ctx = function
 let no_temporal_operator decl_ctx expr =
   match expr with
   | LA.Pre (pos, _, _) -> syntax_error pos (IllegalTemporalOperator ("pre", decl_ctx))
-  | Arrow (pos, _, _) -> syntax_error pos (IllegalTemporalOperator ("arrow", decl_ctx))
+  | Arrow (pos, _, _, _) -> syntax_error pos (IllegalTemporalOperator ("arrow", decl_ctx))
   | _ -> Ok []
 
 let no_stateful_contract_imports ctx contract =
@@ -650,7 +650,7 @@ let rec expr_only_supported_in_merge observer expr =
   | BinaryOp (_, _, e1, e2) 
   | StructUpdate (_, e1, _, Some e2)
   | CompOp (_, _, e1, e2)
-  | Arrow (_, e1, e2)
+  | Arrow (_, e1, e2, _)
   | IndexAccess (_, e1, e2, _)
   | ArrayConstr (_, e1, e2) -> r observer e1 >> r observer e2
   | TernaryOp (_, _, e1, e2, e3)
@@ -1011,7 +1011,7 @@ and check_expr: context -> (context -> LA.expr -> ([> warning] list, ([> error] 
     | BinaryOp (_, _, e1, e2)
     | CompOp (_, _, e1, e2)
     | IndexAccess (_, e1, e2, _)
-    | Arrow (_, e1, e2) ->
+    | Arrow (_, e1, e2, _) ->
       let* warnings1 = (check_expr ctx f e1) in 
       let* warnings2 = (check_expr ctx f e2) in 
       Ok (warnings1 @ warnings2)

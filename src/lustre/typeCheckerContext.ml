@@ -542,7 +542,7 @@ let rec arity_of_expr ty_ctx = function
     let (_, o) = LH.type_arity node_ty in
     o
   | Pre (_, e, _) -> arity_of_expr ty_ctx e
-  | Arrow (_, e, _) -> arity_of_expr ty_ctx e
+  | Arrow (_, e, _, _) -> arity_of_expr ty_ctx e
   | RecordProject (_, e, _) -> arity_of_expr ty_ctx e
   | When (_, e, _) -> arity_of_expr ty_ctx e
   | Merge (_, _, cs) -> arity_of_expr ty_ctx (List.hd cs |> snd)
@@ -890,7 +890,10 @@ let rec ty_vars_of_expr ctx node_name expr =
   | Pre (_, e, None) -> call e
   | Pre (_, e, Some ty) -> 
     SI.union (call e) (ty_vars_of_type ctx node_name ty)
-  | Arrow (_, e1, e2) ->  SI.union (call e1) (call e2)
+  | Arrow (_, e1, e2, None) ->  SI.union (call e1) (call e2)
+  | Arrow (_, e1, e2, Some (ty1, ty2)) ->  
+    SI.union (SI.union (call e1) (call e2))
+             (SI.union (ty_vars_of_type ctx node_name ty1) (ty_vars_of_type ctx node_name ty2))
 
 and ty_vars_of_type ctx node_name ty = 
   let call = ty_vars_of_type ctx node_name in 

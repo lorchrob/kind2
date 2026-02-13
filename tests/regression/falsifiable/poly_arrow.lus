@@ -1,0 +1,9 @@
+type Nat = subtype { x: int | x >= 0 };
+type Nat2 = subrange [0, *] of int;
+
+node N (inp, inp2: int; inp3: [int, int]) returns (out, out2: int; out3: [int, int]; init: int)
+let
+  out = init ->@<Nat,Nat> inp; 
+  out2 = init ->@<Nat2,Nat2> inp2;
+  out3 = '(init, init) ->@<subtype { x: [int, int] | pre x[0] >= 0 },subtype {x: [int, int] | pre x[1] >= 1 }> inp3;
+tel

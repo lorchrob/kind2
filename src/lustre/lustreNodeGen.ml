@@ -1336,7 +1336,7 @@ and compile_ast_expr
     compile_binary bounds E.mk_gte expr1 expr2 
   | A.CompOp (_, A.Gt, expr1, expr2) ->
     compile_binary bounds E.mk_gt expr1 expr2 
-  | A.Arrow (_, expr1, expr2) ->
+  | A.Arrow (_, expr1, expr2, _) ->
     let mk e1 e2 = let e1', e2' = coalesce_array2 e1 e2 in E.mk_arrow e1' e2' in
     compile_binary bounds mk expr1 expr2
   (* ****************************************************************** *)

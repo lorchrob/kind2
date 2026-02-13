@@ -170,7 +170,7 @@ and expr =
   | RestartEvery of position * NI.t * expr list * expr
   (* Temporal operators *)
   | Pre of position * expr * lustre_type option
-  | Arrow of position * expr * expr
+  | Arrow of position * expr * expr * (lustre_type * lustre_type) option
   (* Node calls *)
   | Call of position * lustre_type list * NI.t * expr list
 

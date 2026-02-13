@@ -898,7 +898,7 @@ any_expr:
 assign:
   | e2 = expr; ASSIGN; e3 = expr { e2, e3 }
 
-map_type_annotation: 
+pair_type_annotation: 
   | ATSIGN; LT key_ty=lustre_type; comma_or_semicolon; value_ty=lustre_type; GT
   { key_ty, value_ty } 
 
@@ -964,7 +964,7 @@ pexpr(Q):
   | MAP LSQBRACKET 
     updates = separated_list(SEMICOLON, assign); 
     RSQBRACKET 
-    ta = option(map_type_annotation)
+    ta = option(pair_type_annotation)
   {
     match ta, updates with 
     | None, [] -> 
@@ -1239,7 +1239,7 @@ pexpr(Q):
     { let pos = mk_pos $startpos in
       fail_at_position pos "Unsupported operator: fby" }
 
-  | e1 = pexpr(Q); ARROW; e2 = pexpr(Q) { A.Arrow (mk_pos $startpos, e1, e2) }
+  | e1 = pexpr(Q); ARROW; ta = option(pair_type_annotation); e2 = pexpr(Q) { A.Arrow (mk_pos $startpos, e1, e2, ta) }
 
   (* A node or function call *)
   | e = node_call { e }

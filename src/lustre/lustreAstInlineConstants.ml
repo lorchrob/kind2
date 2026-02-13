@@ -304,10 +304,10 @@ and simplify_expr ?(is_guarded = false) ?(ind_vars = []) ctx =
       if Flags.lus_push_pre ()
       then push_pre is_guarded pos ta e' 
       else Pre (pos, e', ta)
-  | Arrow (pos, e1, e2) ->
+  | Arrow (pos, e1, e2, ta) ->
     let e1' = simplify_expr ~ind_vars ~is_guarded ctx e1 in
     let e2' = simplify_expr ~ind_vars ~is_guarded:true ctx e2 in
-    Arrow (pos, e1', e2')
+    Arrow (pos, e1', e2', ta)
   | LA.BinaryOp (pos, bop, e1, e2) ->
      let e1' = simplify_expr ~ind_vars ~is_guarded ctx e1 in
      let e2' = simplify_expr ~ind_vars ~is_guarded ctx e2 in

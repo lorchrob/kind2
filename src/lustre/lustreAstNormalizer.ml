@@ -702,7 +702,8 @@ let add_step_counter info =
       BinaryOp (dpos, Plus,
         Pre (dpos, Ident (dpos, ctr_id), None),
         Const (dpos, Num (HString.mk_hstring "1"))
-      )
+      ),
+      None
     )
   in
   { (empty ()) with
@@ -757,7 +758,8 @@ let add_history_var_and_equation info id h_id =
       let prev_hist =
         A.Arrow (dpos,
           A.Ident(dpos, id),
-          A.IndexAccess (dpos, A.Pre (dpos, A.Ident (dpos, h_id), None), A.Ident (dpos, index), Array)
+          A.IndexAccess (dpos, A.Pre (dpos, A.Ident (dpos, h_id), None), A.Ident (dpos, index), Array),
+          None
         )
       in
       A.TernaryOp (dpos, A.Ite, cond, A.Ident(dpos, id), prev_hist)
@@ -956,11 +958,11 @@ let desugar_history_in_expr ctx ctr_id prefix expr =
   | Pre (pos, e, ta) ->
     let vars, e' = r map e in
     vars, Pre (pos, e', ta)
-  | Arrow (pos, e1, e2) ->
+  | Arrow (pos, e1, e2, ta) ->
     let vars1, e1' = r map e1 in
     let vars2, e2' = r map e2 in
     StringSet.union vars1 vars2,
-    Arrow (pos, e1', e2')
+    Arrow (pos, e1', e2', ta)
   | Call(pos, ty_args, id, expr_list) ->
     let vars, expr_list' = desugar_expr_list map expr_list in
     vars, Call(pos, ty_args, id, expr_list')
@@ -2190,12 +2192,24 @@ and normalize_expr ?guard info (node_id : NI.t option) map =
   (* ************************************************************************ *)
   (* Guarding and abstracting pres                                            *)
   (* ************************************************************************ *)
-  | Arrow (pos, expr1, expr2) ->
-    let nexpr1, gids1, warnings1 = normalize_expr ?guard info node_id map expr1 in
-    let nexpr2, gids2, warnings2 = normalize_expr ?guard:(Some nexpr1) info node_id map expr2 in
-    let gids = union gids1 gids2 in
-    let warnings = warnings1 @ warnings2 in
-    Arrow (pos, nexpr1, nexpr2), gids, warnings
+  | Arrow (pos, expr1, expr2, ta) ->
+        Format.printf "got here!\n";
+    let gids1, warnings1 = match ta with 
+    | None -> empty (), [] 
+    | Some (ty1, ty2) -> 
+        Format.printf "got here!\n";
+      let gids, warnings = mk_fresh_refinement_type_constraint Local info map pos node_id expr1 ty1 in 
+      let gids', warnings' = mk_fresh_subrange_constraint ~force_prop:true Local info map pos node_id expr1 ty1 in 
+      let gids'', warnings'' = mk_fresh_refinement_type_constraint Local info map pos node_id expr2 ty2 in 
+      let gids''', warnings''' = mk_fresh_subrange_constraint ~force_prop:true Local info map pos node_id expr2 ty2 in 
+      let gids = List.fold_left union (empty ()) [gids; gids'; gids''; gids'''] in
+      gids, warnings @ warnings' @ warnings'' @ warnings'''
+    in
+    let nexpr1, gids2, warnings2 = normalize_expr ?guard info node_id map expr1 in
+    let nexpr2, gids3, warnings3 = normalize_expr ?guard:(Some nexpr1) info node_id map expr2 in
+    let gids = union (union gids1 gids2) gids3 in
+    let warnings = warnings1 @ warnings2 @ warnings3 in
+    Arrow (pos, nexpr1, nexpr2, ta), gids, warnings
   | Pre (pos1, IndexAccess (pos2, expr1, expr2, kind), ta) ->
     let expr = A.IndexAccess (pos2, Pre (pos1, expr1, ta), expr2, kind) in
     normalize_expr ?guard info node_id map expr
@@ -2237,7 +2251,7 @@ and normalize_expr ?guard info (node_id : NI.t option) map =
         match nexpr with
         | A.IndexAccess (pos2, expr1, expr2, kind) ->
           A.IndexAccess (pos2, process_expr expr1, expr2, kind)
-        | e -> A.Arrow (pos, guard, Pre (pos, e, ta))
+        | e -> A.Arrow (pos, guard, Pre (pos, e, ta), None)
       in 
       process_expr nexpr, gids, warnings
   (* ************************************************************************ *)
@@ -2626,7 +2640,11 @@ and expand_node_calls_in_place info node_id var count expr =
   | StructUpdate (p, e1, u, None) -> A.StructUpdate (p, r e1, u, None)
   | ArrayConstr (p, e1, e2) -> A.ArrayConstr (p, r e1, r e2)
   | IndexAccess (p, e1, e2, k) -> A.IndexAccess (p, r e1, r e2, k)
-  | Arrow (p, e1, e2) -> A.Arrow (p, r e1, r e2)
+  | Arrow (p, e1, e2, None) -> A.Arrow (p, r e1, r e2, None)
+  | Arrow (p, e1, e2, Some (ty1, ty2)) -> 
+    let ty1 = AH.map_lustre_ty r ty1 in
+    let ty2 = AH.map_lustre_ty r ty2 in
+    A.Arrow (p, r e1, r e2, Some (ty1, ty2))
   | TernaryOp (p, op, e1, e2, e3) -> A.TernaryOp (p, op, r e1, r e2, r e3)
   | GroupExpr (p, k, expr_list) ->
     let expr_list = List.map (fun e -> r e) expr_list in

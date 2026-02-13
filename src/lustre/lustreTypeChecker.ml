@@ -333,11 +333,16 @@ let no_mismatched_clock is_bool e =
     | Pre (_, e, Some ty) -> 
       LH.fold_lustre_ty (check_clocks clock) (R.ok ()) (>>) ty >> 
       check_clocks clock e
+    | Arrow (_, e1, e2, Some (ty1, ty2)) -> 
+      LH.fold_lustre_ty (check_clocks clock) (R.ok ()) (>>) ty1 >> 
+      LH.fold_lustre_ty (check_clocks clock) (R.ok ()) (>>) ty2 >> 
+      check_clocks clock e1 >> 
+      check_clocks clock e2
     | RecordProject (_, e, _) | UnaryOp (_, _, e)
     | ConvOp (_, _, e) | Pre (_, e, None) | Extract (_, e, _, _) | Quantifier (_, _, _, e) 
     | AnyOp (_, _, e) | ChooseOp (_, _, e) | StructUpdate (_, e, _, None) -> check_clocks clock e
     | BinaryOp (_, _, e1, e2) | StructUpdate (_, e1, _, Some e2)
-    | CompOp (_, _, e1, e2) | Arrow (_, e1, e2) | IndexAccess (_, e1, e2, _)
+    | CompOp (_, _, e1, e2) | Arrow (_, e1, e2, None) | IndexAccess (_, e1, e2, _)
     | ArrayConstr (_, e1, e2) -> check_clocks clock e1 >> check_clocks clock e2
     | TernaryOp (_, _, e1, e2, e3) -> 
       check_clocks clock e1 >> check_clocks clock e2 >> check_clocks clock e3
@@ -378,11 +383,16 @@ let no_mismatched_clock is_bool e =
     | Pre (_, e, Some ty) -> 
       LH.fold_lustre_ty check_merge (R.ok ()) (>>) ty >> 
       check_merge e
+    | Arrow (_, e1, e2, Some (ty1, ty2)) -> 
+      LH.fold_lustre_ty check_merge (R.ok ()) (>>) ty1 >> 
+      LH.fold_lustre_ty check_merge (R.ok ()) (>>) ty2 >> 
+      check_merge e1 >> 
+      check_merge e2
     | RecordProject (_, e, _) | UnaryOp (_, _, e)
     | ConvOp (_, _, e) | Pre (_, e, None) | Extract (_, e, _, _) | Quantifier (_, _, _, e) 
     | AnyOp (_, _, e) | ChooseOp (_, _, e) | When (_, e, _) | StructUpdate (_, e, _, None) -> check_merge e
     | BinaryOp (_, _, e1, e2) | StructUpdate (_, e1, _, Some e2)
-    | CompOp (_, _, e1, e2) | Arrow (_, e1, e2) | IndexAccess (_, e1, e2, _)
+    | CompOp (_, _, e1, e2) | Arrow (_, e1, e2, None) | IndexAccess (_, e1, e2, _)
     | ArrayConstr (_, e1, e2) -> check_merge e1 >> check_merge e2
     | TernaryOp (_, _, e1, e2, e3) -> 
       check_merge e1 >> check_merge e2 >> check_merge e3
@@ -558,8 +568,13 @@ let rec infer_const_attr ctx exp =
             (List.map (fun _ -> error exp "pre operator") (r e))
   | Pre (_, e, None) ->
     List.map (fun _ -> error exp "pre operator") (r e)
-  | Arrow (_, e1, _) ->
+  | Arrow (_, e1, _, None) ->
     List.map (fun _ -> error exp "arrow operator") (r e1)
+  | Arrow (_, e1, e2, Some (ty1, ty2)) ->
+    combine (List.map (fun _ -> error exp "pre operator") (r e1))
+            (combine (LH.fold_lustre_ty r [R.ok ()] combine ty1)
+            (combine (LH.fold_lustre_ty r [R.ok ()] combine ty2)
+                (List.map (fun _ -> error exp "pre operator") (r e2))))
   (* Node calls *)
   | AnyOp _ -> assert false
   | ChooseOp _ -> assert false
@@ -793,10 +808,16 @@ let rec instantiate_type_variables_expr: tc_context -> NI.t -> tc_type list -> L
   | Pre (pos, e, None) -> 
     let* e = call e in
     R.ok (LA.Pre (pos, e, None))
-  | Arrow (pos, e1, e2) -> 
+  | Arrow (pos, e1, e2, None) -> 
     let* e1 = call e1 in 
     let* e2 = call e2 in
-    R.ok (LA.Arrow (pos, e1, e2))
+    R.ok (LA.Arrow (pos, e1, e2, None))
+  | Arrow (pos, e1, e2, Some (ty1, ty2)) -> 
+    let* ty1 = instantiate_type_variables ctx pos nname ty1 ty_args in
+    let* ty2 = instantiate_type_variables ctx pos nname ty2 ty_args in
+    let* e1 = call e1 in
+    let* e2 = call e2 in 
+    R.ok (LA.Arrow (pos, e1, e2, Some (ty1, ty2)))
   | AnyOp _ -> assert false (* Polymorphism is handled after `any` ops are desugared *)
   | ChooseOp _ -> assert false (* Polymorphism is handled after `choose` ops are desugared *)
 
@@ -1310,13 +1331,23 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
   | LA.Pre (p, e, None) -> 
     let* ty, e, warnings = infer_type_expr ctx nname e in 
     R.ok (ty, LA.Pre (p, e, None), warnings)
-  | LA.Arrow (pos, e1, e2) ->
+  | LA.Arrow (pos, e1, e2, None) ->
     let* ty1, e1, warnings1 = infer_type_expr ctx nname e1 in
     let* ty2, e2, warnings2 = infer_type_expr ctx nname e2 in
     R.ifM (eq_lustre_type ctx ty1 ty2)
-      (R.ok (ty1, LA.Arrow (pos, e1, e2), warnings1 @ warnings2))
+      (R.ok (ty1, LA.Arrow (pos, e1, e2, None), warnings1 @ warnings2))
       (type_error pos (IlltypedArrow (ty1, ty2)))
-    
+  | LA.Arrow (pos, e1, e2, Some (ty1_annot, ty2_annot)) ->
+    let* ty1, e1, warnings1 = infer_type_expr ctx nname e1 in
+    let* ty2, e2, warnings2 = infer_type_expr ctx nname e2 in
+    R.ifM (eq_lustre_type ctx ty1 ty1_annot) 
+      (R.ifM (eq_lustre_type ctx ty2 ty2_annot)
+        (R.ifM
+        (eq_lustre_type ctx ty1 ty2)
+          (R.ok (ty1, LA.Arrow (pos, e1, e2, Some (ty1_annot, ty2_annot)), warnings1 @ warnings2))
+          (type_error pos (IlltypedArrow (ty1, ty2))))
+        (type_error pos (IlltypedArrow (ty2_annot, ty2))))
+    (type_error pos (IlltypedArrow (ty1_annot, ty1)))
   | LA.Call (pos, ty_args, node_id, arg_exprs) -> (
     Debug.parse "Inferring type for node call %a" NI.pp_print_node_id_user_name node_id ;
     (* Values 'Input' and 'true' passed to check_type_well_formed are conservative 
@@ -1481,7 +1512,7 @@ and check_type_expr: tc_context -> NI.t option -> LA.expr -> tc_type -> (LA.expr
   | Activate (pos, _, _, _, _) 
   | Merge (pos, _, _) 
   | RestartEvery (pos, _, _, _) 
-  | Arrow (pos, _, _) 
+  | Arrow (pos, _, _, _) 
   | GroupExpr (pos, _, _) 
   | StructUpdate (pos, _, _, _) 
   | RecordExpr (pos, _, _, _) 
@@ -2444,13 +2475,18 @@ and expr_contains_set_binop ctx ni expr =
   | Pre (_, e, Some ty) ->
     LH.fold_lustre_ty r false (||) ty || 
     r e
+  | Arrow (_, e1, e2, Some (ty1, ty2)) ->
+    LH.fold_lustre_ty r false (||) ty1 || 
+    LH.fold_lustre_ty r false (||) ty2 || 
+    r e1 || 
+    r e2
   | EmptySet (_, Some ty) -> LH.fold_lustre_ty r false (||) ty
   | RecordProject (_, e, _) | UnaryOp (_, _, e)
   | ConvOp (_, _, e) | When (_, e, _) | Pre (_, e, None) 
   | Extract (_, e, _, _) | StructUpdate (_, e, _, None)
     -> r e
   | BinaryOp (_, _, e1, e2) | CompOp (_, _, e1, e2) | StructUpdate (_, e1, _, Some e2)
-  | ArrayConstr (_, e1, e2) | IndexAccess (_, e1, e2, _) | Arrow (_, e1, e2)
+  | ArrayConstr (_, e1, e2) | IndexAccess (_, e1, e2, _) | Arrow (_, e1, e2, None)
     -> r e1 || r e2
   | TernaryOp (_, _, e1, e2, e3)
     -> r e1 || r e2 || r e3

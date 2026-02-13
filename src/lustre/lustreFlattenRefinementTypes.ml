@@ -212,7 +212,8 @@ let rec flatten_ref_types_expr: TypeCheckerContext.tc_context -> A.expr -> A.exp
     RestartEvery (p, i, List.map rec_call es, rec_call e)
   | Pre (p, e, None) -> Pre(p, rec_call e, None)
   | Pre (p, e, Some ty) -> Pre(p, rec_call e, Some (flatten_ref_type ctx ty))
-  | Arrow (p, e1, e2) ->  Arrow (p, rec_call e1, rec_call e2)
+  | Arrow (p, e1, e2, None) ->  Arrow (p, rec_call e1, rec_call e2, None)
+  | Arrow (p, e1, e2, Some (ty1, ty2)) ->  Arrow (p, rec_call e1, rec_call e2, Some (flatten_ref_type ctx ty1, flatten_ref_type ctx ty2))
   | Call (p, ty_args, i, es) -> Call (p, ty_args, i, List.map rec_call es)
 
 let flatten_ref_types_item ctx item = 

@@ -175,10 +175,10 @@ fun ctx node_name fun_ids expr ->
   | Pre (pos, e, ta) -> 
     let e, gen_nodes = rec_call e in
     Pre (pos, e, ta), gen_nodes
-  | Arrow (pos, e1, e2) -> 
+  | Arrow (pos, e1, e2, ta) -> 
     let e1, gen_nodes1 = rec_call e1 in
     let e2, gen_nodes2 = rec_call e2 in
-    Arrow (pos, e1, e2), gen_nodes1 @ gen_nodes2
+    Arrow (pos, e1, e2, ta), gen_nodes1 @ gen_nodes2
   | Call (pos, ty_args, id, expr_list) ->
     let expr_list, gen_nodes = List.map rec_call expr_list |> List.split in
     Call (pos, ty_args, id, expr_list), List.flatten gen_nodes

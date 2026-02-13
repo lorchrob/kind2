@@ -332,7 +332,12 @@ and mk_graph_expr ?(only_modes = false)
   | LA.Pre (_, e, Some ty) ->  
     union_dependency_analysis_data (mk_graph_expr ~only_modes e)
                                    (mk_graph_type ty)
-  | LA.Arrow (_, e1, e2) ->  union_dependency_analysis_data (mk_graph_expr ~only_modes e1) (mk_graph_expr ~only_modes e2)
+  | LA.Arrow (_, e1, e2, None) ->  
+    union_dependency_analysis_data (mk_graph_expr ~only_modes e1) (mk_graph_expr ~only_modes e2)
+  | LA.Arrow (_, e1, e2, Some (ty1, ty2)) ->  
+    union_dependency_analysis_data
+      (union_dependency_analysis_data (mk_graph_expr ~only_modes e1) (mk_graph_expr ~only_modes e2))
+      (union_dependency_analysis_data (mk_graph_type ty1) (mk_graph_type ty2))
   | LA.ModeRef (pos, ids) ->
     if List.length ids > 1 then
       singleton_dependency_analysis_data empty_hs (List.fold_left HString.concat2 contract_prefix (Lib.drop_last ids)) pos
@@ -433,7 +438,9 @@ let rec get_node_call_from_expr: LA.expr -> (LA.ident * Lib.position) list
   | LA.Pre (_, e, None) -> get_node_call_from_expr e
   | LA.Pre (_, e, Some ty) -> 
     get_node_call_from_expr e @ extract_node_calls_type ty
-  | LA.Arrow (_, e1, e2) -> (get_node_call_from_expr e1) @ (get_node_call_from_expr e2)
+  | LA.Arrow (_, e1, e2, None) -> (get_node_call_from_expr e1) @ (get_node_call_from_expr e2)
+  | LA.Arrow (_, e1, e2, Some (ty1, ty2)) -> 
+    (get_node_call_from_expr e1) @ (get_node_call_from_expr e2) @ extract_node_calls_type ty1 @ extract_node_calls_type ty2
   (* Node calls *)
   | LA.Call (pos, _, node_id, es) -> (HString.concat2 node_prefix (NI.get_internal_name node_id), pos) :: List.flatten (List.map get_node_call_from_expr es)
 (** Returns all the node calls from an expression *)
@@ -717,7 +724,10 @@ let rec vars_with_flattened_nodes: node_summary -> int -> LA.expr -> LA.SI.t
   (* Temporal operators *) 
   (*!! Was this case supposed to not recurse on the subexpression? *)
   | Pre (_, _, _) -> SI.empty
-  | Arrow (_, e1, e2) -> SI.union (r e1) (r e2)
+  | Arrow (_, e1, e2, None) -> SI.union (r e1) (r e2)
+  | Arrow (_, e1, e2, Some (ty1, ty2)) -> 
+    SI.union (SI.union (r e1) (r e2))
+             (SI.union (LH.vars_of_type ty1) (LH.vars_of_type ty2))
 
   (* Node calls *)
   | Call (_, _, i, es) ->
@@ -905,7 +915,7 @@ let rec mk_graph_expr2: node_summary -> LA.expr -> (dependency_analysis_data lis
   | LA.Pre (_, e, _) ->
     let* g = mk_graph_expr2 m e in
     R.ok (List.map (map_g_pos (fun v -> HString.concat2 v (HString.mk_hstring "$p"))) g) 
-  | LA.Arrow (p, e1, e2) ->
+  | LA.Arrow (p, e1, e2, _) ->
      mk_graph_expr2 m e1 >>= fun g1 ->
      mk_graph_expr2 m e2 >>= fun g2 ->
      if (List.length g1 != List.length g2) then
