@@ -1337,17 +1337,17 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
     R.ifM (eq_lustre_type ctx ty1 ty2)
       (R.ok (ty1, LA.Arrow (pos, e1, e2, None), warnings1 @ warnings2))
       (type_error pos (IlltypedArrow (ty1, ty2)))
-  | LA.Arrow (pos, e1, e2, Some (ty1_annot, ty2_annot)) ->
-    let* ty1, e1, warnings1 = infer_type_expr ctx nname e1 in
-    let* ty2, e2, warnings2 = infer_type_expr ctx nname e2 in
-    R.ifM (eq_lustre_type ctx ty1 ty1_annot) 
-      (R.ifM (eq_lustre_type ctx ty2 ty2_annot)
+  | LA.Arrow (pos, e1, e2, Some (ty1, ty2)) ->
+    let* inf_ty1, e1, warnings1 = infer_type_expr ctx nname e1 in
+    let* inf_ty2, e2, warnings2 = infer_type_expr ctx nname e2 in
+    R.ifM (eq_lustre_type ctx inf_ty1 ty1) 
+      (R.ifM (eq_lustre_type ctx inf_ty2 ty2)
         (R.ifM
-        (eq_lustre_type ctx ty1 ty2)
-          (R.ok (ty1, LA.Arrow (pos, e1, e2, Some (ty1_annot, ty2_annot)), warnings1 @ warnings2))
-          (type_error pos (IlltypedArrow (ty1, ty2))))
-        (type_error pos (IlltypedArrow (ty2_annot, ty2))))
-    (type_error pos (IlltypedArrow (ty1_annot, ty1)))
+        (eq_lustre_type ctx inf_ty1 inf_ty2)
+          (R.ok (inf_ty1, LA.Arrow (pos, e1, e2, Some (ty1, ty2)), warnings1 @ warnings2))
+          (type_error pos (IlltypedArrow (inf_ty1, inf_ty2))))
+        (type_error pos (IlltypedArrow (ty2, inf_ty2))))
+    (type_error pos (IlltypedArrow (ty1, inf_ty1)))
   | LA.Call (pos, ty_args, node_id, arg_exprs) -> (
     Debug.parse "Inferring type for node call %a" NI.pp_print_node_id_user_name node_id ;
     (* Values 'Input' and 'true' passed to check_type_well_formed are conservative 
