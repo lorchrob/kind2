@@ -1,0 +1,14 @@
+type Nat = subrange [0, *] of int;
+
+node M<T> (x: T) returns (y: T)
+let
+  y = x;
+tel
+
+node N (inp: Nat) returns (out1, out2, out3: int)
+let
+  out1 = pre inp;
+  out2 = inp -> pre out2;
+  out3 = M(inp);
+  check out3 >= -4;
+tel

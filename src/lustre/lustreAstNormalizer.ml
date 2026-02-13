@@ -2193,11 +2193,9 @@ and normalize_expr ?guard info (node_id : NI.t option) map =
   (* Guarding and abstracting pres                                            *)
   (* ************************************************************************ *)
   | Arrow (pos, expr1, expr2, ta) ->
-        Format.printf "got here!\n";
     let gids1, warnings1 = match ta with 
     | None -> empty (), [] 
     | Some (ty1, ty2) -> 
-        Format.printf "got here!\n";
       let gids, warnings = mk_fresh_refinement_type_constraint Local info map pos node_id expr1 ty1 in 
       let gids', warnings' = mk_fresh_subrange_constraint ~force_prop:true Local info map pos node_id expr1 ty1 in 
       let gids'', warnings'' = mk_fresh_refinement_type_constraint Local info map pos node_id expr2 ty2 in 

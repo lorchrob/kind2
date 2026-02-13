@@ -158,8 +158,6 @@ let type_check declarations =
 
     (* Step 3. Dependency analysis on the top level declarations.  *)
     let* sorted_const_type_decls = AD.sort_globals const_type_decls in
-    Format.printf "%a\n"
-      (Lib.pp_print_list LA.pp_print_declaration "\n") node_contract_src;
    
     (* Step 4. Type check top level declarations *)
     let* sorted_const_type_decls, ctx, warnings2 = TC.type_check_infer_globals TCContext.empty_tc_context sorted_const_type_decls in
@@ -172,14 +170,9 @@ let type_check declarations =
 
     (* Step 7. Dependency analysis on nodes and contracts *)
     let* (sorted_node_contract_decls, toplevel_nodes, node_summary) = AD.sort_and_check_nodes_contracts node_contract_src in
-    Format.printf "%a\n"
-      (Lib.pp_print_list LA.pp_print_declaration "\n") sorted_node_contract_decls;
 
     (* Step 8. Type check nodes and contracts *)
     let* global_ctx, sorted_node_contract_decls, warnings3 = TC.type_check_infer_nodes_and_contracts inlined_ctx sorted_node_contract_decls in
-
-    Format.printf "%a\n"
-      (Lib.pp_print_list LA.pp_print_declaration "\n") sorted_node_contract_decls;
 
     (* Provide lsp info if option is enabled *)
     if Flags.log_format_json () && Flags.Lsp.lsp () then
@@ -199,22 +192,14 @@ let type_check declarations =
       else Res.ok (sorted_node_contract_decls, global_ctx, NodeId.Map.empty)
     in
 
-    Format.printf "%a\n"
-      (Lib.pp_print_list LA.pp_print_declaration "\n") sorted_node_contract_decls;
     (* Step 10. Remove multiple assignment from if blocks and frame blocks *)
     let sorted_node_contract_decls, gids = RMA.remove_mult_assign global_ctx gids sorted_node_contract_decls in
-    Format.printf "%a\n"
-      (Lib.pp_print_list LA.pp_print_declaration "\n") sorted_node_contract_decls;
 
     (* Step 11. Desugar imperative if block to ITEs *)
     let* (sorted_node_contract_decls, gids) = (LDI.desugar_if_blocks global_ctx sorted_node_contract_decls gids) in
-    Format.printf "%a\n"
-      (Lib.pp_print_list LA.pp_print_declaration "\n") sorted_node_contract_decls;
 
     (* Step 12. Desugar frame blocks by adding node equations and guarding oracles. *)
     let* (sorted_node_contract_decls, warnings4) = LDF.desugar_frame_blocks sorted_node_contract_decls in
-    Format.printf "%a\n"
-      (Lib.pp_print_list LA.pp_print_declaration "\n") sorted_node_contract_decls;
 
     (* Step 13. Inline constants in node equations *)
     let* (inlined_global_ctx, const_inlined_nodes_and_contracts) =
@@ -230,9 +215,6 @@ let type_check declarations =
 
     (* Step 16. Instantiate polymorphic nodes with concrete types *)
     let inlined_global_ctx, gids, const_inlined_nodes_and_contracts = LIP.instantiate_polymorphic_nodes inlined_global_ctx gids const_inlined_nodes_and_contracts in
-
-    Format.printf "%a\n"
-      (Lib.pp_print_list LA.pp_print_declaration "\n") const_inlined_nodes_and_contracts;
 
     (* Step 17. Flatten refinement types *)
     let const_inlined_type_and_consts, gids = LFR.flatten_ref_types inlined_global_ctx gids const_inlined_type_and_consts in
@@ -255,8 +237,6 @@ let type_check declarations =
       LCF.constants_to_calls new_func_ids const_inlined_nodes_and_contracts
     in
 
-    Format.printf "%a\n"
-      (Lib.pp_print_list LA.pp_print_declaration "\n") const_inlined_nodes_and_contracts;
     (* Step 20. Normalize AST: guard pres, abstract to locals where appropriate *)
     let* (normalized_decls, gids, warnings6) =
       LAN.normalize inlined_global_ctx abstract_interp_ctx inlinable_funcs 

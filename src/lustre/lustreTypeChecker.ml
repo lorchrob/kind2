@@ -896,7 +896,6 @@ let union_keys key id1 id2 = match key, id1, id2 with
 let rec unify_types pos ctx ty1 ty2 = 
   let r = unify_types pos ctx in
   let* ty1 = expand_type_syn_reftype_history_subrange ctx ty1 in
-  let* ty2 = expand_type_syn_reftype_history_subrange ctx ty2 in
   match ty1, ty2 with 
   (* UserTypes denote __the callee's__ 
      type parameters after calling `expand_type_syn_reftype_history_subrange` *)
@@ -906,7 +905,7 @@ let rec unify_types pos ctx ty1 ty2 =
   | LA.AbstractType (_, id), ty2 -> R.ok (StringMap.singleton id ty2) 
 
   (* Group types are weird... *)
-  | GroupType (_, tys1), GroupType (_, tys2) ->
+  | GroupType (_, tys1), LA.GroupType (_, tys2) ->
     let (ftys1, ftys2) = LH.flatten_group_types tys1, LH.flatten_group_types tys2 in 
     if List.length ftys1 = List.length ftys2
     then 
@@ -939,6 +938,7 @@ let rec unify_types pos ctx ty1 ty2 =
   | LA.Bool _, LA.Bool _ 
   | LA.SBitVector _, LA.SBitVector _
   | LA.UBitVector _, LA.UBitVector _ -> R.ok StringMap.empty 
+  | ty1, LA.RefinementType (_, (_, _, ty2), _) -> r ty1 ty2
   | ty1, ty2 -> 
     type_error pos (IlltypedCall (ty1, ty2))
 
@@ -1330,12 +1330,12 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
     (*R.ok (ty, LA.Pre (p, e, None), warnings)*)
   | LA.Pre (p, e, None) -> 
     let* ty, e, warnings = infer_type_expr ctx nname e in 
-    R.ok (ty, LA.Pre (p, e, None), warnings)
+    R.ok (ty, LA.Pre (p, e, Some ty), warnings)
   | LA.Arrow (pos, e1, e2, None) ->
     let* ty1, e1, warnings1 = infer_type_expr ctx nname e1 in
     let* ty2, e2, warnings2 = infer_type_expr ctx nname e2 in
     R.ifM (eq_lustre_type ctx ty1 ty2)
-      (R.ok (ty1, LA.Arrow (pos, e1, e2, None), warnings1 @ warnings2))
+      (R.ok (ty1, LA.Arrow (pos, e1, e2, Some (ty1, ty2)), warnings1 @ warnings2))
       (type_error pos (IlltypedArrow (ty1, ty2)))
   | LA.Arrow (pos, e1, e2, Some (ty1, ty2)) ->
     let* inf_ty1, e1, warnings1 = infer_type_expr ctx nname e1 in
@@ -1379,7 +1379,7 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
       | ty_args -> 
         (* Type arguments were provided with a type annotation *)
           let* node_ty = instantiate_type_variables ctx pos node_id node_ty ty_args in 
-          R.ok (node_ty, [], arg_exprs, [])
+          R.ok (node_ty, ty_args, arg_exprs, [])
       in
       let exp_arg_tys, exp_ret_tys = match node_ty with 
         | LA.TArr (_, exp_arg_tys, exp_ret_tys) ->
@@ -1389,12 +1389,13 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
       let* given_arg_tys, arg_exprs, warnings3 = infer_type_node_args pos ctx arg_exprs nname in
       let given_arg_tys = expand_type_syn ctx given_arg_tys in
       let* are_equal = eq_lustre_type ctx exp_arg_tys given_arg_tys in
-      let ty_args = if inferred_type_args <> [] then inferred_type_args else ty_args in
-      if are_equal then
-        let call = LA.Call (pos, ty_args, node_id, arg_exprs) in  
+      if are_equal then(
+        Format.printf "Got here, inferred_type_args: %a\n"
+          (Lib.pp_print_list LA.pp_print_lustre_type ", ") inferred_type_args;
+        let call = LA.Call (pos, inferred_type_args, node_id, arg_exprs) in  
         (check_constant_args ctx node_id arg_exprs >> 
         (R.ok (exp_ret_tys, call, List.flatten warnings1 @ warnings2 @ warnings3)))
-      else
+      )else
         (type_error pos (IlltypedCall (exp_arg_tys, given_arg_tys)))
     )
     | _, Some ty -> type_error pos (ExpectedFunctionType ty)
