@@ -1389,13 +1389,11 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
       let* given_arg_tys, arg_exprs, warnings3 = infer_type_node_args pos ctx arg_exprs nname in
       let given_arg_tys = expand_type_syn ctx given_arg_tys in
       let* are_equal = eq_lustre_type ctx exp_arg_tys given_arg_tys in
-      if are_equal then(
-        Format.printf "Got here, inferred_type_args: %a\n"
-          (Lib.pp_print_list LA.pp_print_lustre_type ", ") inferred_type_args;
+      if are_equal then
         let call = LA.Call (pos, inferred_type_args, node_id, arg_exprs) in  
         (check_constant_args ctx node_id arg_exprs >> 
         (R.ok (exp_ret_tys, call, List.flatten warnings1 @ warnings2 @ warnings3)))
-      )else
+      else
         (type_error pos (IlltypedCall (exp_arg_tys, given_arg_tys)))
     )
     | _, Some ty -> type_error pos (ExpectedFunctionType ty)

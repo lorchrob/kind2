@@ -787,6 +787,8 @@ let get_expr_ty info map node_id expr =
       )
       | None -> info.context
     in
+    Format.printf "expr: %a\n"
+      A.pp_print_expr expr;
     Chk.infer_type_expr ctx node_id expr |> unwrap |> (fun (ty, _, _) -> ty) in
   Chk.expand_type_syn_reftype_history info.context ty |> unwrap
 
