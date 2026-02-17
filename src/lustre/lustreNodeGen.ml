@@ -1386,10 +1386,10 @@ and compile_ast_expr
     compile_group_expr bounds (fun j i -> X.TupleIndex i :: j) expr_list
   | A.RecordExpr (_, _, _, expr_list) ->
     compile_record_expr bounds expr_list
-  | A.StructUpdate (_, _, _, None)  (* SetIndex case *)
-  | A.StructUpdate (_, _, [A.MapIndex _], _) -> 
+  | A.StructUpdate (_, _, _, None, _)  (* SetIndex case *)
+  | A.StructUpdate (_, _, [A.MapIndex _], _, _) -> 
     assert false (* handled during normalization *)
-  | A.StructUpdate (_, expr1, index, Some expr2) ->
+  | A.StructUpdate (_, expr1, index, Some expr2, _) ->
     compile_struct_update expr1 index expr2
   (* ****************************************************************** *)
   (* Node Calls                                                         *)

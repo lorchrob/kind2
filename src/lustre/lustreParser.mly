@@ -972,7 +972,7 @@ pexpr(Q):
       fail_at_position pos "Empty map must have a type annotation"
     | ta, updates -> 
       List.fold_left (fun acc (e2, e3) -> 
-        A.StructUpdate (mk_pos $startpos, acc, [A.MapIndex (mk_pos $startpos, e2)], Some e3) 
+        A.StructUpdate (mk_pos $startpos, acc, [A.MapIndex (mk_pos $startpos, e2)], Some e3, None) 
       )  (A.EmptyMap (mk_pos $startpos, ta)) updates 
   }
 
@@ -988,7 +988,7 @@ pexpr(Q):
       fail_at_position pos "Empty set must have a type annotation"
     | ta, elements -> 
       List.fold_left (fun acc e -> 
-        A.StructUpdate (mk_pos $startpos, acc, [A.SetIndex (mk_pos $startpos, e)], None) 
+        A.StructUpdate (mk_pos $startpos, acc, [A.SetIndex (mk_pos $startpos, e)], None, None) 
       ) (A.EmptySet (mk_pos $startpos, ta)) elements
   }
 
@@ -996,9 +996,10 @@ pexpr(Q):
     LSQBRACKET; 
     updates = separated_nonempty_list(SEMICOLON, assign); 
     RSQBRACKET;
+    ta = option(pair_type_annotation);
     { 
       List.fold_left (fun acc (e2, e3) -> 
-        A.StructUpdate (mk_pos $startpos, acc, [A.GenericIndex (mk_pos $startpos, e2)], Some e3) 
+        A.StructUpdate (mk_pos $startpos, acc, [A.GenericIndex (mk_pos $startpos, e2)], Some e3, ta) 
       ) e1 updates 
     }
 

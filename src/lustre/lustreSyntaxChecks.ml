@@ -273,7 +273,7 @@ function
     (fun acc (_, e) -> acc || has_stateful_op ctx e)
     false l
 
-| StructUpdate (_, e1, li, e2) ->
+| StructUpdate (_, e1, li, e2, _) ->
   has_stateful_op ctx e1 ||
   match e2 with 
   | Some e2 -> has_stateful_op ctx e2 
@@ -644,11 +644,11 @@ let rec expr_only_supported_in_merge observer expr =
   | Pre (_, e, _) 
   | Extract (_, e, _, _)
   | Quantifier (_, _, _, e) 
-  | StructUpdate (_, e, _, None) -> r observer e
+  | StructUpdate (_, e, _, None, _) -> r observer e
   | AnyOp (_, _, e)  
   | ChooseOp (_, _, e) -> r observer e 
   | BinaryOp (_, _, e1, e2) 
-  | StructUpdate (_, e1, _, Some e2)
+  | StructUpdate (_, e1, _, Some e2, _)
   | CompOp (_, _, e1, e2)
   | Arrow (_, e1, e2, _)
   | IndexAccess (_, e1, e2, _)
@@ -1061,7 +1061,7 @@ and check_expr: context -> (context -> LA.expr -> ([> warning] list, ([> error] 
       let* warnings1 = (check_expr_list ctx f e1) in 
       let* warnings2 = (check_expr ctx f e2) in
       Ok (warnings1 @ warnings2)
-    | StructUpdate (_, e1, l, e2) ->
+    | StructUpdate (_, e1, l, e2, _) ->
       let* warnings1 = (check_expr ctx f e1) in 
       let* warnings2 = match e2 with 
       | Some e2 -> check_expr ctx f e2 

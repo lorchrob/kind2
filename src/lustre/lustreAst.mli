@@ -155,7 +155,7 @@ and expr =
   | RecordExpr of position * ident * lustre_type list * (ident * expr) list
   | GroupExpr of position * group_expr * expr list
   (* Update of structured expressions *)
-  | StructUpdate of position * expr * label_or_index list * expr option
+  | StructUpdate of position * expr * label_or_index list * expr option * (lustre_type * lustre_type) option
   | EmptyMap of position * (lustre_type * lustre_type) option
   | EmptySet of position * lustre_type option
   | ArrayConstr of position * expr * expr 

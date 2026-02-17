@@ -340,8 +340,8 @@ let no_mismatched_clock is_bool e =
       check_clocks clock e2
     | RecordProject (_, e, _) | UnaryOp (_, _, e)
     | ConvOp (_, _, e) | Pre (_, e, None) | Extract (_, e, _, _) | Quantifier (_, _, _, e) 
-    | AnyOp (_, _, e) | ChooseOp (_, _, e) | StructUpdate (_, e, _, None) -> check_clocks clock e
-    | BinaryOp (_, _, e1, e2) | StructUpdate (_, e1, _, Some e2)
+    | AnyOp (_, _, e) | ChooseOp (_, _, e) | StructUpdate (_, e, _, None, _) -> check_clocks clock e
+    | BinaryOp (_, _, e1, e2) | StructUpdate (_, e1, _, Some e2, _)
     | CompOp (_, _, e1, e2) | Arrow (_, e1, e2, None) | IndexAccess (_, e1, e2, _)
     | ArrayConstr (_, e1, e2) -> check_clocks clock e1 >> check_clocks clock e2
     | TernaryOp (_, _, e1, e2, e3) -> 
@@ -390,8 +390,8 @@ let no_mismatched_clock is_bool e =
       check_merge e2
     | RecordProject (_, e, _) | UnaryOp (_, _, e)
     | ConvOp (_, _, e) | Pre (_, e, None) | Extract (_, e, _, _) | Quantifier (_, _, _, e) 
-    | AnyOp (_, _, e) | ChooseOp (_, _, e) | When (_, e, _) | StructUpdate (_, e, _, None) -> check_merge e
-    | BinaryOp (_, _, e1, e2) | StructUpdate (_, e1, _, Some e2)
+    | AnyOp (_, _, e) | ChooseOp (_, _, e) | When (_, e, _) | StructUpdate (_, e, _, None, _) -> check_merge e
+    | BinaryOp (_, _, e1, e2) | StructUpdate (_, e1, _, Some e2, _)
     | CompOp (_, _, e1, e2) | Arrow (_, e1, e2, None) | IndexAccess (_, e1, e2, _)
     | ArrayConstr (_, e1, e2) -> check_merge e1 >> check_merge e2
     | TernaryOp (_, _, e1, e2, e3) -> 
@@ -544,8 +544,8 @@ let rec infer_const_attr ctx exp =
       (List.map r es)
   | GroupExpr (_, ExprList, es) -> List.flatten (List.map r es)
   (* Update of structured expressions *)
-  | StructUpdate (_, e1, _, Some e2) -> combine (r e1) (r e2)
-  | StructUpdate (_, e1, _, None) -> r e1
+  | StructUpdate (_, e1, _, Some e2, _) -> combine (r e1) (r e2)
+  | StructUpdate (_, e1, _, None, _) -> r e1
   | ArrayConstr (_, e1, e2) -> combine (r e1) (r e2)
   | IndexAccess (_, e1, e2, _) -> combine (r e1) (r e2)
   (* Quantified expressions *)
@@ -762,13 +762,13 @@ let rec instantiate_type_variables_expr: tc_context -> NI.t -> tc_type list -> L
   | GroupExpr (pos, kind, expr_list) ->
     let* expr_list = R.seq (List.map call expr_list) in
     R.ok (LA.GroupExpr (pos, kind, expr_list))
-  | StructUpdate (pos, e1, idx, Some e2) ->
+  | StructUpdate (pos, e1, idx, Some e2, ta) ->
     let* e1 = call e1 in 
     let* e2 = call e2 in
-    R.ok (LA.StructUpdate (pos, e1, idx, Some e2))
-  | StructUpdate (pos, e1, idx, None) ->
+    R.ok (LA.StructUpdate (pos, e1, idx, Some e2, ta))
+  | StructUpdate (pos, e1, idx, None, ta) ->
     let* e1 = call e1 in 
-    R.ok (LA.StructUpdate (pos, e1, idx, None))
+    R.ok (LA.StructUpdate (pos, e1, idx, None, ta))
   | ArrayConstr (pos, e1, e2) ->
     let* e1 = call e1 in 
     let* e2 = call e2 in
@@ -975,14 +975,14 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
                 | Some ty -> R.ok ty in
     let* ty = lookup_mode_ty ctx ids in 
     R.ok (ty, e, [])
-  | LA.StructUpdate (pos, (EmptyMap (_, None) as e1), [MapIndex (p2, e2)], Some e3) ->
+  | LA.StructUpdate (pos, (EmptyMap (_, None) as e1), [MapIndex (p2, e2)], Some e3, ta) ->
     let* ty1, e2, warnings1 = infer_type_expr ctx nname e2 in 
     let* ty2, e3, warnings2 = infer_type_expr ctx nname e3 in 
-    let e = LA.StructUpdate (pos, e1, [MapIndex (p2, e2)], Some e3) in 
+    let e = LA.StructUpdate (pos, e1, [MapIndex (p2, e2)], Some e3, ta) in 
     R.ok (LA.Map (pos, ty1, ty2), e, warnings1 @ warnings2)
-  | LA.StructUpdate (pos, (EmptySet (_, None) as e1), [SetIndex (p2, e2)], None) ->
+  | LA.StructUpdate (pos, (EmptySet (_, None) as e1), [SetIndex (p2, e2)], None, ta) ->
     let* ty, e2, warnings = infer_type_expr ctx nname e2 in 
-    let e = LA.StructUpdate (pos, e1, [SetIndex (p2, e2)], None) in
+    let e = LA.StructUpdate (pos, e1, [SetIndex (p2, e2)], None, ta) in
     R.ok (LA.Set (pos, ty), e, warnings)
   (* only reachable through previous 2 cases *)
   | LA.EmptyMap (_, None) | LA.EmptySet (_, None) -> assert false 
@@ -1146,7 +1146,7 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
     check_array_size_expr ctx nname sup_expr >>
     R.ok (LA.ArrayType (pos, (b_ty, sup_expr)), LA.ArrayConstr (pos, b_expr, sup_expr), warnings)
   )
-  | LA.StructUpdate (pos, ue, i_or_ls, e) ->
+  | LA.StructUpdate (pos, ue, i_or_ls, e, ta) ->
     if List.length i_or_ls != 1
     then type_error pos (Unsupported ("List of labels or indices for structure update is not supported"))
     else
@@ -1162,7 +1162,7 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
                     | Some f_ty ->
                       let* e_ty, e, warnings2 = infer_type_expr ctx nname (Option.get e) in
                       R.ifM (eq_lustre_type ctx f_ty e_ty)
-                        (R.ok (r_ty, LA.StructUpdate (pos, ue, i_or_ls, Some e), warnings1 @ warnings2))
+                        (R.ok (r_ty, LA.StructUpdate (pos, ue, i_or_ls, Some e, ta), warnings1 @ warnings2))
                         (type_error pos (TypeMismatchOfRecordLabel (l, f_ty, e_ty)))
                     | None -> type_error pos (NotAFieldOfRecord l)))
               | r_ty, _, _ -> type_error pos (IlltypedUpdateWithLabel r_ty))
@@ -1177,7 +1177,7 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
           in
           let* e_ty, e, warnings2 = infer_type_expr ctx nname (Option.get e) in
           let* ue, warnings3 = check_type_tuple_proj pos ctx nname ue idx e_ty in
-          R.ok (ue_ty, LA.StructUpdate (pos, ue, i_or_ls, Some e), warnings1 @ warnings2 @ warnings3)
+          R.ok (ue_ty, LA.StructUpdate (pos, ue, i_or_ls, Some e, ta), warnings1 @ warnings2 @ warnings3)
         )
         | ArrayType (_, (b_ty, _)) -> (
           let* index_type, i, warnings1 = infer_type_expr ctx nname i in
@@ -1186,7 +1186,7 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
           if b then
             let* e_ty, e, warnings2 = infer_type_expr ctx nname (Option.get e) in
             R.ifM (eq_lustre_type ctx b_ty e_ty)
-              (R.ok (ue_ty, LA.StructUpdate (pos, ue, LA.Index (pos, i) :: List.tl i_or_ls, Some e), warnings1 @ warnings2))
+              (R.ok (ue_ty, LA.StructUpdate (pos, ue, LA.Index (pos, i) :: List.tl i_or_ls, Some e, ta), warnings1 @ warnings2))
               (type_error pos (ExpectedType (e_ty, b_ty)))
           else
             type_error pos (ExpectedIntegerTypeForArrayIndex index_type)
@@ -1202,7 +1202,7 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
             R.ifM (eq_lustre_type ctx index_type kt)
               (let* e_ty, e, warnings3 = infer_type_expr ctx nname (Option.get e) in
                 R.ifM (eq_lustre_type ctx e_ty vt)
-                  (R.ok (ue_ty, LA.StructUpdate (pos, ue, [LA.MapIndex (p, idx_e)], Some e), warnings1 @ warnings2 @ warnings3))
+                  (R.ok (ue_ty, LA.StructUpdate (pos, ue, [LA.MapIndex (p, idx_e)], Some e, ta), warnings1 @ warnings2 @ warnings3))
                   (type_error pos (ExpectedType (e_ty, vt))))
               (type_error pos (ExpectedType (index_type, kt)))
           )
@@ -1214,7 +1214,7 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
             let* index_type, idx_e, warnings2 = infer_type_expr ctx nname idx_e in
             let* index_type = expand_type_syn_reftype_history ctx index_type in
             R.ifM (eq_lustre_type ctx index_type kt)
-              (R.ok (ue_ty, LA.StructUpdate (pos, ue, [LA.SetIndex (p, idx_e)], None), warnings1 @ warnings2))
+              (R.ok (ue_ty, LA.StructUpdate (pos, ue, [LA.SetIndex (p, idx_e)], None, ta), warnings1 @ warnings2))
               (type_error pos (ExpectedType (index_type, kt)))
           )
          | _ -> type_error pos (IlltypedUpdateWithIndex ue_ty))
@@ -1514,7 +1514,7 @@ and check_type_expr: tc_context -> NI.t option -> LA.expr -> tc_type -> (LA.expr
   | RestartEvery (pos, _, _, _) 
   | Arrow (pos, _, _, _) 
   | GroupExpr (pos, _, _) 
-  | StructUpdate (pos, _, _, _) 
+  | StructUpdate (pos, _, _, _, _) 
   | RecordExpr (pos, _, _, _) 
   | Pre (pos, _, _) 
   | When (pos, _, _) 
@@ -2483,9 +2483,9 @@ and expr_contains_set_binop ctx ni expr =
   | EmptySet (_, Some ty) -> LH.fold_lustre_ty r false (||) ty
   | RecordProject (_, e, _) | UnaryOp (_, _, e)
   | ConvOp (_, _, e) | When (_, e, _) | Pre (_, e, None) 
-  | Extract (_, e, _, _) | StructUpdate (_, e, _, None)
+  | Extract (_, e, _, _) | StructUpdate (_, e, _, None, _)
     -> r e
-  | BinaryOp (_, _, e1, e2) | CompOp (_, _, e1, e2) | StructUpdate (_, e1, _, Some e2)
+  | BinaryOp (_, _, e1, e2) | CompOp (_, _, e1, e2) | StructUpdate (_, e1, _, Some e2, _)
   | ArrayConstr (_, e1, e2) | IndexAccess (_, e1, e2, _) | Arrow (_, e1, e2, None)
     -> r e1 || r e2
   | TernaryOp (_, _, e1, e2, e3)

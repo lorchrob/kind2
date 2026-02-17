@@ -151,7 +151,7 @@ let rec fill_ite_helper frame_pos node_id lhs fill e =
     Condact (p, r e1, r e2, b, 
              List.map r l1, List.map r l2)
 
-  | StructUpdate (p, e1, li, e2) -> 
+  | StructUpdate (p, e1, li, e2, ta) -> 
     let e2 = match e2 with 
     | Some e2 -> Some (r e2)
     | None -> None 
@@ -164,7 +164,7 @@ let rec fill_ite_helper frame_pos node_id lhs fill e =
               | Index (a, e) -> Index (a, r e)
               | GenericIndex (a, e) -> GenericIndex (a, r e)
              ) li, 
-    e2)
+    e2, ta)
 
 (** Helper function to generate node equations when an initialized variable in the 
     frame block is left undefined in the frame block body. *)

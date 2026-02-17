@@ -119,7 +119,7 @@ type expr =
   | RecordExpr of position * ident * lustre_type list * (ident * expr) list
   | GroupExpr of position * group_expr * expr list
   (* Update of structured expressions *)
-  | StructUpdate of position * expr * label_or_index list * expr option
+  | StructUpdate of position * expr * label_or_index list * expr option * (lustre_type * lustre_type) option
   | EmptyMap of position * (lustre_type * lustre_type) option
   | EmptySet of position * lustre_type option
   | ArrayConstr of position * expr * expr  
@@ -414,20 +414,20 @@ let rec pp_print_expr ppf =
 
     | GroupExpr (p, ArrayExpr, l) -> Format.fprintf ppf "%a@[<hv 1>[%a]@]" ppos p pl l
 
-    | StructUpdate (_, EmptySet _, i, None) -> 
+    | StructUpdate (_, EmptySet _, i, None, _) -> 
 
       Format.fprintf ppf
         "{ %a }"
         (pp_print_list pp_print_label_or_index "") i
 
-    | StructUpdate (_, EmptyMap _, i, Some e) -> 
+    | StructUpdate (_, EmptyMap _, i, Some e, _) -> 
 
       Format.fprintf ppf
         "map[%a := %a]"
         (pp_print_list pp_print_label_or_index "") i
         pp_print_expr e
 
-    | StructUpdate (_, e1, i, Some e2) -> 
+    | StructUpdate (_, e1, i, Some e2, None) -> 
 
       Format.fprintf ppf
         "%a[%a := %a]"
@@ -435,7 +435,17 @@ let rec pp_print_expr ppf =
         (pp_print_list pp_print_label_or_index "") i
         pp_print_expr e2
 
-    | StructUpdate (_, e1, i, None) -> 
+    | StructUpdate (_, e1, i, Some e2, Some (kt, vt)) -> 
+
+      Format.fprintf ppf
+        "%a[%a := %a]@<%a, %a>"
+        pp_print_expr e1
+        (pp_print_list pp_print_label_or_index "") i
+        pp_print_expr e2
+        pp_print_lustre_type kt
+        pp_print_lustre_type vt
+
+    | StructUpdate (_, e1, i, None, _) -> 
 
       Format.fprintf ppf
         "%a + { %a }"
