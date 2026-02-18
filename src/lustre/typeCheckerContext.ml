@@ -891,9 +891,9 @@ let rec ty_vars_of_expr ctx node_name expr =
   | Pre (_, e, Some ty) -> 
     SI.union (call e) (ty_vars_of_type ctx node_name ty)
   | Arrow (_, e1, e2, None) ->  SI.union (call e1) (call e2)
-  | Arrow (_, e1, e2, Some (ty1, ty2)) ->  
+  | Arrow (_, e1, e2, Some ty) ->  
     SI.union (SI.union (call e1) (call e2))
-             (SI.union (ty_vars_of_type ctx node_name ty1) (ty_vars_of_type ctx node_name ty2))
+             (ty_vars_of_type ctx node_name ty)
 
 and ty_vars_of_type ctx node_name ty = 
   let call = ty_vars_of_type ctx node_name in 

@@ -334,10 +334,10 @@ and mk_graph_expr ?(only_modes = false)
                                    (mk_graph_type ty)
   | LA.Arrow (_, e1, e2, None) ->  
     union_dependency_analysis_data (mk_graph_expr ~only_modes e1) (mk_graph_expr ~only_modes e2)
-  | LA.Arrow (_, e1, e2, Some (ty1, ty2)) ->  
+  | LA.Arrow (_, e1, e2, Some ty) ->  
     union_dependency_analysis_data
       (union_dependency_analysis_data (mk_graph_expr ~only_modes e1) (mk_graph_expr ~only_modes e2))
-      (union_dependency_analysis_data (mk_graph_type ty1) (mk_graph_type ty2))
+      (mk_graph_type ty)
   | LA.ModeRef (pos, ids) ->
     if List.length ids > 1 then
       singleton_dependency_analysis_data empty_hs (List.fold_left HString.concat2 contract_prefix (Lib.drop_last ids)) pos
@@ -439,8 +439,8 @@ let rec get_node_call_from_expr: LA.expr -> (LA.ident * Lib.position) list
   | LA.Pre (_, e, Some ty) -> 
     get_node_call_from_expr e @ extract_node_calls_type ty
   | LA.Arrow (_, e1, e2, None) -> (get_node_call_from_expr e1) @ (get_node_call_from_expr e2)
-  | LA.Arrow (_, e1, e2, Some (ty1, ty2)) -> 
-    (get_node_call_from_expr e1) @ (get_node_call_from_expr e2) @ extract_node_calls_type ty1 @ extract_node_calls_type ty2
+  | LA.Arrow (_, e1, e2, Some ty) -> 
+    (get_node_call_from_expr e1) @ (get_node_call_from_expr e2) @ extract_node_calls_type ty
   (* Node calls *)
   | LA.Call (pos, _, node_id, es) -> (HString.concat2 node_prefix (NI.get_internal_name node_id), pos) :: List.flatten (List.map get_node_call_from_expr es)
 (** Returns all the node calls from an expression *)
@@ -725,9 +725,9 @@ let rec vars_with_flattened_nodes: node_summary -> int -> LA.expr -> LA.SI.t
   (*!! Was this case supposed to not recurse on the subexpression? *)
   | Pre (_, _, _) -> SI.empty
   | Arrow (_, e1, e2, None) -> SI.union (r e1) (r e2)
-  | Arrow (_, e1, e2, Some (ty1, ty2)) -> 
+  | Arrow (_, e1, e2, Some ty) -> 
     SI.union (SI.union (r e1) (r e2))
-             (SI.union (LH.vars_of_type ty1) (LH.vars_of_type ty2))
+             (LH.vars_of_type ty)
 
   (* Node calls *)
   | Call (_, _, i, es) ->

@@ -1239,7 +1239,7 @@ pexpr(Q):
     { let pos = mk_pos $startpos in
       fail_at_position pos "Unsupported operator: fby" }
 
-  | e1 = pexpr(Q); ARROW; ta = option(pair_type_annotation); e2 = pexpr(Q) { A.Arrow (mk_pos $startpos, e1, e2, ta) }
+  | e1 = pexpr(Q); ARROW; ta = option(type_annotation); e2 = pexpr(Q) { A.Arrow (mk_pos $startpos, e1, e2, ta) }
 
   (* A node or function call *)
   | e = node_call { e }
