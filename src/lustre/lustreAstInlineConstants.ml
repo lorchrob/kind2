@@ -272,8 +272,9 @@ and push_pre is_guarded pos ta =
   | Arrow _ as e -> LA.Pre (pos, e, ta)
   | Call _ as e -> LA.Pre (pos, e, ta)
 
-and simplify_expr ?(is_guarded = false) ?(ind_vars = []) ctx =
-  function
+and simplify_expr ?(is_guarded = false) ?(ind_vars = []) ctx e =
+  let r = simplify_expr ~is_guarded ~ind_vars ctx in
+  match e with 
   | LA.Const _ as c -> c
   | LA.Ident (_, i) as ident ->
      if List.mem i ind_vars then ident else
@@ -364,7 +365,12 @@ and simplify_expr ?(is_guarded = false) ?(ind_vars = []) ctx =
     EmptySet (pos, Some (inline_constants_of_lustre_type ~ind_vars ctx ty))
   | EmptyMap (pos, Some (kt, vt)) -> 
     EmptyMap (pos, Some (inline_constants_of_lustre_type ~ind_vars ctx kt, 
-                    inline_constants_of_lustre_type ~ind_vars ctx vt))
+                         inline_constants_of_lustre_type ~ind_vars ctx vt))
+  | StructUpdate (pos, e1, idxs, e2, Some (kt, vt)) -> 
+    StructUpdate (pos, r e1, idxs, Option.map r e2, Some (inline_constants_of_lustre_type ~ind_vars ctx kt, 
+                                                          inline_constants_of_lustre_type ~ind_vars ctx vt))
+  | StructUpdate (pos, e1, idxs, e2, None) -> 
+    StructUpdate (pos, r e1, idxs, Option.map r e2, None)
   | e -> e
 (** Assumptions: These constants are arranged in dependency order, 
    all of the constants have been type checked *)

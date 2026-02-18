@@ -979,7 +979,7 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
     let* ty1, e2, warnings1 = infer_type_expr ctx nname e2 in 
     let* ty2, e3, warnings2 = infer_type_expr ctx nname e3 in 
     let e = LA.StructUpdate (pos, e1, [MapIndex (p2, e2)], Some e3, ta) in 
-    R.ok (LA.Map (pos, ty1, ty2), e, warnings1 @ warnings2)
+    R.ok (LA.Map (pos, ty1, ty2), e, warnings1 @ warnings2) 
   | LA.StructUpdate (pos, (EmptySet (_, None) as e1), [SetIndex (p2, e2)], None, ta) ->
     let* ty, e2, warnings = infer_type_expr ctx nname e2 in 
     let e = LA.StructUpdate (pos, e1, [SetIndex (p2, e2)], None, ta) in
@@ -1199,6 +1199,15 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
          | Map (_, kt, vt) -> (
             let* index_type, idx_e, warnings2 = infer_type_expr ctx nname idx_e in
             let* index_type = expand_type_syn_reftype_history ctx index_type in
+            let* _ = (match ta with 
+            | Some (kt2, vt2) ->
+              let ty = LA.Map (pos, kt2, vt2) in 
+              let inf_ty = LA.Map (pos, kt, vt) in
+              R.ifM (eq_lustre_type ctx ty inf_ty)
+                (R.ok (ty, e, []))
+                (type_error pos (ExpectedType (ty, inf_ty)))
+            | None -> R.ok (LA.Map (pos, kt, vt), e, warnings1 @ warnings2) 
+            ) in
             R.ifM (eq_lustre_type ctx index_type kt)
               (let* e_ty, e, warnings3 = infer_type_expr ctx nname (Option.get e) in
                 R.ifM (eq_lustre_type ctx e_ty vt)

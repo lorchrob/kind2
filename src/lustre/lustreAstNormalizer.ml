@@ -2193,7 +2193,6 @@ and normalize_expr ?guard info (node_id : NI.t option) map =
   (* Guarding and abstracting pres                                            *)
   (* ************************************************************************ *)
   | Arrow (pos, expr1, expr2, ta) ->
-        Format.printf "got here!\n";
     let gids1, warnings1 = match ta with 
     | None -> empty (), [] 
     | Some (ty1, ty2) -> 
