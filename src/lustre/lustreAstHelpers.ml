@@ -162,9 +162,17 @@ let rec expr_contains_call = function
     expr_contains_call e2
   | RecordProject (_, e, _) | UnaryOp (_, _, e)
   | ConvOp (_, _, e) | Quantifier (_, _, _, e) | When (_, e, _)
-  | Pre (_, e, None) | Extract (_, e, _, _) | StructUpdate (_, e, _, None, _)
+  | Pre (_, e, None) | Extract (_, e, _, _) | StructUpdate (_, e, _, None, None)
     -> expr_contains_call e
-  | BinaryOp (_, _, e1, e2) | CompOp (_, _, e1, e2) | StructUpdate (_, e1, _, Some e2, _)
+  | StructUpdate (_, e, _, None, Some (ty1, ty2)) ->
+    expr_contains_call e ||
+    fold_lustre_ty expr_contains_call false (||) ty1 ||
+    fold_lustre_ty expr_contains_call false (||) ty2
+  | StructUpdate (_, e1, _, Some e2, Some (ty1, ty2)) ->
+    expr_contains_call e1 || expr_contains_call e2 ||
+    fold_lustre_ty expr_contains_call false (||) ty1 ||
+    fold_lustre_ty expr_contains_call false (||) ty2
+  | BinaryOp (_, _, e1, e2) | CompOp (_, _, e1, e2) | StructUpdate (_, e1, _, Some e2, None)
   | ArrayConstr (_, e1, e2) | IndexAccess (_, e1, e2, _)
   | Arrow (_, e1, e2, None)
     -> expr_contains_call e1 || expr_contains_call e2
@@ -198,9 +206,17 @@ let rec expr_contains_id id = function
     expr_contains_id id e2
   | RecordProject (_, e, _) | UnaryOp (_, _, e)
   | ConvOp (_, _, e) | Quantifier (_, _, _, e) | When (_, e, _) | Pre (_, e, None) 
-  | Extract (_, e, _, _) | StructUpdate (_, e, _, None, _)
+  | Extract (_, e, _, _) | StructUpdate (_, e, _, None, None)
     -> expr_contains_id id e
-  | BinaryOp (_, _, e1, e2) | CompOp (_, _, e1, e2) | StructUpdate (_, e1, _, Some e2, _)
+  | StructUpdate (_, e, _, None, Some (ty1, ty2)) ->
+    expr_contains_id id e ||
+    fold_lustre_ty (expr_contains_id id) false (||) ty1 ||
+    fold_lustre_ty (expr_contains_id id) false (||) ty2
+  | StructUpdate (_, e1, _, Some e2, Some (ty1, ty2)) ->
+    expr_contains_id id e1 || expr_contains_id id e2 ||
+    fold_lustre_ty (expr_contains_id id) false (||) ty1 ||
+    fold_lustre_ty (expr_contains_id id) false (||) ty2
+  | BinaryOp (_, _, e1, e2) | CompOp (_, _, e1, e2) | StructUpdate (_, e1, _, Some e2, None)
   | ArrayConstr (_, e1, e2) | IndexAccess (_, e1, e2, _) | Arrow (_, e1, e2, None)
     -> expr_contains_id id e1 || expr_contains_id id e2
   | TernaryOp (_, _, e1, e2, e3)
@@ -538,7 +554,7 @@ let rec has_unguarded_pre ung = function
     let us = List.map (fun (_, e) -> has_unguarded_pre ung e) ie in
     List.exists Lib.identity us
 
-  | StructUpdate (_, e1, li, Some e2, _) ->
+  | StructUpdate (_, e1, li, Some e2, None) ->
     let u1 = has_unguarded_pre ung e1 in
     let us = List.map (function
         | Label _ -> false
@@ -550,7 +566,21 @@ let rec has_unguarded_pre ung = function
     let u2 = has_unguarded_pre ung e2 in
     u1 || u2 || List.exists Lib.identity us
 
-  | StructUpdate (_, e1, li, None, _) ->
+  | StructUpdate (_, e1, li, Some e2, Some (ty1, ty2)) ->
+    let u1 = has_unguarded_pre ung e1 in
+    let us = List.map (function
+        | Label _ -> false
+        | MapIndex (_, e)
+        | SetIndex (_, e)
+        | GenericIndex (_, e)
+        | Index (_, e) -> has_unguarded_pre ung e
+      ) li in
+    let u2 = has_unguarded_pre ung e2 in
+    let u3 = fold_lustre_ty (has_unguarded_pre ung) false (||) ty1 in
+    let u4 = fold_lustre_ty (has_unguarded_pre ung) false (||) ty2 in
+    u1 || u2 || u3 || u4 || List.exists Lib.identity us
+
+  | StructUpdate (_, e1, li, None, None) ->
     let u1 = has_unguarded_pre ung e1 in
     let us = List.map (function
         | Label _ -> false
@@ -560,6 +590,19 @@ let rec has_unguarded_pre ung = function
         | Index (_, e) -> has_unguarded_pre ung e
       ) li in
     u1 || List.exists Lib.identity us
+
+  | StructUpdate (_, e1, li, None, Some (ty1, ty2)) ->
+    let u1 = has_unguarded_pre ung e1 in
+    let us = List.map (function
+        | Label _ -> false
+        | MapIndex (_, e)
+        | SetIndex (_, e)
+        | GenericIndex (_, e)
+        | Index (_, e) -> has_unguarded_pre ung e
+      ) li in
+    let u2 = fold_lustre_ty (has_unguarded_pre ung) false (||) ty1 in
+    let u3 = fold_lustre_ty (has_unguarded_pre ung) false (||) ty2 in
+    u1 || u2 || u3 || List.exists Lib.identity us
 
   | Pre (pos, e, ta) as p ->
     if ung then begin
@@ -648,7 +691,7 @@ let rec has_unguarded_pre_no_warn ung = function
     let us = List.map (fun (_, e) -> has_unguarded_pre_no_warn ung e) ie in
     List.exists Lib.identity us
 
-  | StructUpdate (_, e1, li, None, _) ->
+  | StructUpdate (_, e1, li, None, None) ->
     let u1 = has_unguarded_pre_no_warn ung e1 in
     let us = List.map (function
         | Label _ -> false
@@ -659,7 +702,20 @@ let rec has_unguarded_pre_no_warn ung = function
       ) li in
     u1 || List.exists Lib.identity us
 
-  | StructUpdate (_, e1, li, Some e2, _) ->
+  | StructUpdate (_, e1, li, None, Some (ty1, ty2)) ->
+    let u1 = has_unguarded_pre_no_warn ung e1 in
+    let us = List.map (function
+        | Label _ -> false
+        | MapIndex (_, e)
+        | SetIndex (_, e)
+        | GenericIndex (_, e)
+        | Index (_, e) -> has_unguarded_pre_no_warn ung e
+      ) li in
+    let u2 = fold_lustre_ty (has_unguarded_pre_no_warn ung) false (||) ty1 in
+    let u3 = fold_lustre_ty (has_unguarded_pre_no_warn ung) false (||) ty2 in
+    u1 || u2 || u3 || List.exists Lib.identity us
+
+  | StructUpdate (_, e1, li, Some e2, None) ->
     let u1 = has_unguarded_pre_no_warn ung e1 in
     let us = List.map (function
         | Label _ -> false
@@ -670,6 +726,20 @@ let rec has_unguarded_pre_no_warn ung = function
       ) li in
     let u2 = has_unguarded_pre_no_warn ung e2 in
     u1 || u2 || List.exists Lib.identity us
+
+  | StructUpdate (_, e1, li, Some e2, Some (ty1, ty2)) ->
+    let u1 = has_unguarded_pre_no_warn ung e1 in
+    let us = List.map (function
+        | Label _ -> false
+        | MapIndex (_, e)
+        | SetIndex (_, e)
+        | GenericIndex (_, e)
+        | Index (_, e) -> has_unguarded_pre_no_warn ung e
+      ) li in
+    let u2 = has_unguarded_pre_no_warn ung e2 in
+    let u3 = fold_lustre_ty (has_unguarded_pre_no_warn ung) false (||) ty1 in
+    let u4 = fold_lustre_ty (has_unguarded_pre_no_warn ung) false (||) ty2 in
+    u1 || u2 || u3 || u4 || List.exists Lib.identity us
 
   | Pre (_, e, None)->
     let u = has_unguarded_pre_no_warn true e in
@@ -767,7 +837,7 @@ let rec has_pre_or_arrow = function
     List.map (fun (_, e) -> has_pre_or_arrow e) ie
     |> some_of_list
 
-  | StructUpdate (_, e1, li, None, _) ->
+  | StructUpdate (_, e1, li, None, None) ->
     has_pre_or_arrow e1
     |> unwrap_or (
           fun _ ->
@@ -781,7 +851,25 @@ let rec has_pre_or_arrow = function
             |> some_of_list
     )
 
-  | StructUpdate (_, e1, li, Some e2, _) ->
+  | StructUpdate (_, e1, li, None, Some (ty1, ty2)) ->
+    has_pre_or_arrow e1
+    |> unwrap_or (
+          fun _ ->
+            (match fold_lustre_ty has_pre_or_arrow None (fun x1 x2 -> some_of_list [x1; x2]) ty1 with
+             | None -> fold_lustre_ty has_pre_or_arrow None (fun x1 x2 -> some_of_list [x1; x2]) ty2
+             | res -> res)
+            |> unwrap_or (fun _ ->
+              List.map (function
+                | Label _ -> None
+                | MapIndex (_, e)
+                | SetIndex (_, e)
+                | GenericIndex (_, e)
+                | Index (_, e) -> has_pre_or_arrow e
+              ) li
+              |> some_of_list)
+    )
+
+  | StructUpdate (_, e1, li, Some e2, None) ->
     has_pre_or_arrow e1
     |> unwrap_or (
       fun _ ->
@@ -796,6 +884,28 @@ let rec has_pre_or_arrow = function
               | Index (_, e) -> has_pre_or_arrow e
             ) li
             |> some_of_list
+        )
+    )
+
+  | StructUpdate (_, e1, li, Some e2, Some (ty1, ty2)) ->
+    has_pre_or_arrow e1
+    |> unwrap_or (
+      fun _ ->
+        has_pre_or_arrow e2
+        |> unwrap_or (
+          fun _ ->
+            (match fold_lustre_ty has_pre_or_arrow None (fun x1 x2 -> some_of_list [x1; x2]) ty1 with
+             | None -> fold_lustre_ty has_pre_or_arrow None (fun x1 x2 -> some_of_list [x1; x2]) ty2
+             | res -> res)
+            |> unwrap_or (fun _ ->
+              List.map (function
+                | Label _ -> None
+                | MapIndex (_, e)
+                | SetIndex (_, e)
+                | GenericIndex (_, e)
+                | Index (_, e) -> has_pre_or_arrow e
+              ) li
+              |> some_of_list)
         )
     )
 
@@ -994,8 +1104,16 @@ let rec vars_of_node_calls_h obs =
   | RecordExpr (_, _, _, flds) -> SI.flatten (List.map (vars obs) (snd (List.split flds)))
   | GroupExpr (_, _, es) -> SI.flatten (List.map (vars obs) es)
   (* Update of structured expressions *)
-  | StructUpdate (_, e1, _, Some e2, _) -> SI.union (vars obs e1) (vars obs e2)
-  | StructUpdate (_, e1, _, None, _) -> vars obs e1
+  | StructUpdate (_, e1, _, Some e2, None) -> SI.union (vars obs e1) (vars obs e2)
+  | StructUpdate (_, e1, _, Some e2, Some (ty1, ty2)) ->
+    SI.union (SI.union (vars obs e1) (vars obs e2))
+             (SI.union (fold_lustre_ty (vars obs) SI.empty SI.union ty1)
+                       (fold_lustre_ty (vars obs) SI.empty SI.union ty2))
+  | StructUpdate (_, e1, _, None, None) -> vars obs e1
+  | StructUpdate (_, e1, _, None, Some (ty1, ty2)) ->
+    SI.union (vars obs e1)
+             (SI.union (fold_lustre_ty (vars obs) SI.empty SI.union ty1)
+                       (fold_lustre_ty (vars obs) SI.empty SI.union ty2))
   | ArrayConstr (_, e1, e2) -> SI.union (vars obs e1) (vars obs e2)
   | IndexAccess (_, e1, e2, _) -> SI.union (vars obs e1) (vars obs e2)
   (* Quantified expressions *)
@@ -1049,8 +1167,16 @@ let rec vars_without_node_call_ids: expr -> iset =
   | RecordExpr (_, _, _, flds) -> SI.flatten (List.map vars (snd (List.split flds)))
   | GroupExpr (_, _, es) -> SI.flatten (List.map vars es)
   (* Update of structured expressions *)
-  | StructUpdate (_, e1, _, Some e2, _) -> SI.union (vars e1) (vars e2)
-  | StructUpdate (_, e1, _, None, _) -> vars e1 
+  | StructUpdate (_, e1, _, Some e2, None) -> SI.union (vars e1) (vars e2)
+  | StructUpdate (_, e1, _, Some e2, Some (ty1, ty2)) ->
+    SI.union (SI.union (vars e1) (vars e2))
+             (SI.union (fold_lustre_ty vars SI.empty SI.union ty1)
+                       (fold_lustre_ty vars SI.empty SI.union ty2))
+  | StructUpdate (_, e1, _, None, None) -> vars e1
+  | StructUpdate (_, e1, _, None, Some (ty1, ty2)) ->
+    SI.union (vars e1)
+             (SI.union (fold_lustre_ty vars SI.empty SI.union ty1)
+                       (fold_lustre_ty vars SI.empty SI.union ty2))
   | ArrayConstr (_, e1, e2) -> SI.union (vars e1) (vars e2)
   | IndexAccess (_, e1, e2, _) -> SI.union (vars e1) (vars e2)
   (* Quantified expressions *)
@@ -1104,8 +1230,16 @@ let rec calls_of_expr: expr -> NI.Set.t =
   | CompOp (_,_,e1, e2) -> (calls_of_expr e1) |> NI.Set.union (calls_of_expr e2)
   | RecordExpr (_, _, _, flds) -> NI.Set.flatten (List.map calls_of_expr (snd (List.split flds)))
   | GroupExpr (_, _, es) -> NI.Set.flatten (List.map calls_of_expr es)
-  | StructUpdate (_, e1, _, Some e2, _) -> NI.Set.union (calls_of_expr e1) (calls_of_expr e2)
-  | StructUpdate (_, e1, _, None, _) -> calls_of_expr e1
+  | StructUpdate (_, e1, _, Some e2, None) -> NI.Set.union (calls_of_expr e1) (calls_of_expr e2)
+  | StructUpdate (_, e1, _, Some e2, Some (ty1, ty2)) ->
+    NI.Set.union (NI.Set.union (calls_of_expr e1) (calls_of_expr e2))
+                 (NI.Set.union (fold_lustre_ty calls_of_expr NI.Set.empty NI.Set.union ty1)
+                               (fold_lustre_ty calls_of_expr NI.Set.empty NI.Set.union ty2))
+  | StructUpdate (_, e1, _, None, None) -> calls_of_expr e1
+  | StructUpdate (_, e1, _, None, Some (ty1, ty2)) ->
+    NI.Set.union (calls_of_expr e1)
+                 (NI.Set.union (fold_lustre_ty calls_of_expr NI.Set.empty NI.Set.union ty1)
+                               (fold_lustre_ty calls_of_expr NI.Set.empty NI.Set.union ty2))
   | ArrayConstr (_, e1, e2) -> NI.Set.union (calls_of_expr e1) (calls_of_expr e2)
   | EmptyMap (_, None) | EmptySet (_, None) -> NI.Set.empty
   | EmptyMap (_, Some (kt, vt)) -> 
@@ -1155,8 +1289,16 @@ let rec vars_without_node_call_ids_current: expr -> iset =
   | RecordExpr (_, _, _, flds) -> SI.flatten (List.map vars (snd (List.split flds)))
   | GroupExpr (_, _, es) -> SI.flatten (List.map vars es)
   (* Update of structured expressions *)
-  | StructUpdate (_, e1, _, Some e2, _) -> SI.union (vars e1) (vars e2)
-  | StructUpdate (_, e1, _, None, _) -> vars e1
+  | StructUpdate (_, e1, _, Some e2, None) -> SI.union (vars e1) (vars e2)
+  | StructUpdate (_, e1, _, Some e2, Some (ty1, ty2)) ->
+    SI.union (SI.union (vars e1) (vars e2))
+             (SI.union (fold_lustre_ty vars SI.empty SI.union ty1)
+                       (fold_lustre_ty vars SI.empty SI.union ty2))
+  | StructUpdate (_, e1, _, None, None) -> vars e1
+  | StructUpdate (_, e1, _, None, Some (ty1, ty2)) ->
+    SI.union (vars e1)
+             (SI.union (fold_lustre_ty vars SI.empty SI.union ty1)
+                       (fold_lustre_ty vars SI.empty SI.union ty2))
   | ArrayConstr (_, e1, e2) -> SI.union (vars e1) (vars e2)
   | IndexAccess (_, e1, e2, _) -> SI.union (vars e1) (vars e2)
   (* Quantified expressions *)

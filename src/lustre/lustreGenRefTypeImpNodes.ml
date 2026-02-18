@@ -80,9 +80,13 @@ let rec expr_contains_mode_ref expr =
     -> r e1 || r e2 || AH.fold_lustre_ty r false (||) ty1 || AH.fold_lustre_ty r false (||) ty2
   | RecordProject (_, e, _) | UnaryOp (_, _, e)
   | ConvOp (_, _, e) | Quantifier (_, _, _, e) | When (_, e, _)
-  | Pre (_, e, None) | StructUpdate (_, e, _, None, _)
+  | Pre (_, e, None) | StructUpdate (_, e, _, None, None)
     -> r e
-  | BinaryOp (_, _, e1, e2) | CompOp (_, _, e1, e2) | StructUpdate (_, e1, _, Some e2, _)
+  | StructUpdate (_, e, _, None, Some (ty1, ty2)) ->
+    r e || AH.fold_lustre_ty r false (||) ty1 || AH.fold_lustre_ty r false (||) ty2
+  | StructUpdate (_, e1, _, Some e2, Some (ty1, ty2)) ->
+    r e1 || r e2 || AH.fold_lustre_ty r false (||) ty1 || AH.fold_lustre_ty r false (||) ty2
+  | BinaryOp (_, _, e1, e2) | CompOp (_, _, e1, e2) | StructUpdate (_, e1, _, Some e2, None)
   | ArrayConstr (_, e1, e2) | IndexAccess (_, e1, e2, _)
   | Arrow (_, e1, e2, None)
     -> r e1 || r e2

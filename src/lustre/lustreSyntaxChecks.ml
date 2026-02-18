@@ -1061,7 +1061,7 @@ and check_expr: context -> (context -> LA.expr -> ([> warning] list, ([> error] 
       let* warnings1 = (check_expr_list ctx f e1) in 
       let* warnings2 = (check_expr ctx f e2) in
       Ok (warnings1 @ warnings2)
-    | StructUpdate (_, e1, l, e2, ta) ->
+    | StructUpdate (_, e1, l, e2, _) ->
       let* warnings1 = (check_expr ctx f e1) in 
       let* warnings2 = match e2 with 
       | Some e2 -> check_expr ctx f e2 

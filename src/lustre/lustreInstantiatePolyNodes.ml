@@ -378,13 +378,24 @@ and gen_poly_decls_expr: Ctx.tc_context -> GI.t NI.Map.t -> NI.t option -> (A.de
     let ctx, gids, ty1, decls3, node_decls_map = gen_poly_decls_ty ctx gids caller_nname node_decls_map ty1 in 
     let ctx, gids, ty2, decls4, node_decls_map = gen_poly_decls_ty ctx gids caller_nname node_decls_map ty2 in 
     ctx, gids, Arrow (p, expr1, expr2, Some (ty1, ty2)), decls1 @ decls2 @ decls3 @ decls4, node_decls_map 
-  | StructUpdate (p, expr1, lois, Some expr2, ta) ->
+  | StructUpdate (p, expr1, lois, Some expr2, None) ->
     let ctx, gids, expr1, decls1, node_decls_map = rec_call expr1 in 
     let ctx, gids, expr2, decls2, node_decls_map = gen_poly_decls_expr ctx gids caller_nname node_decls_map expr2 in 
-    ctx, gids, StructUpdate (p, expr1, lois, Some expr2, ta), decls1 @ decls2, node_decls_map 
-  | StructUpdate (p, expr1, lois, None, ta) ->
+    ctx, gids, StructUpdate (p, expr1, lois, Some expr2, None), decls1 @ decls2, node_decls_map 
+  | StructUpdate (p, expr1, lois, Some expr2, Some (ty1, ty2)) ->
     let ctx, gids, expr1, decls1, node_decls_map = rec_call expr1 in 
-    ctx, gids, StructUpdate (p, expr1, lois, None, ta), decls1, node_decls_map 
+    let ctx, gids, expr2, decls2, node_decls_map = gen_poly_decls_expr ctx gids caller_nname node_decls_map expr2 in 
+    let ctx, gids, ty1, decls3, node_decls_map = gen_poly_decls_ty ctx gids caller_nname node_decls_map ty1 in 
+    let ctx, gids, ty2, decls4, node_decls_map = gen_poly_decls_ty ctx gids caller_nname node_decls_map ty2 in 
+    ctx, gids, StructUpdate (p, expr1, lois, Some expr2, Some (ty1, ty2)), decls1 @ decls2 @ decls3 @ decls4, node_decls_map 
+  | StructUpdate (p, expr1, lois, None, None) ->
+    let ctx, gids, expr1, decls1, node_decls_map = rec_call expr1 in 
+    ctx, gids, StructUpdate (p, expr1, lois, None, None), decls1, node_decls_map
+  | StructUpdate (p, expr1, lois, None, Some (ty1, ty2)) ->
+    let ctx, gids, expr1, decls1, node_decls_map = rec_call expr1 in 
+    let ctx, gids, ty1, decls2, node_decls_map = gen_poly_decls_ty ctx gids caller_nname node_decls_map ty1 in 
+    let ctx, gids, ty2, decls3, node_decls_map = gen_poly_decls_ty ctx gids caller_nname node_decls_map ty2 in 
+    ctx, gids, StructUpdate (p, expr1, lois, None, Some (ty1, ty2)), decls1 @ decls2 @ decls3, node_decls_map 
   | IndexAccess (p, expr1, expr2, kind) ->
     let ctx, gids, expr1, decls1, node_decls_map = rec_call expr1 in 
     let ctx, gids, expr2, decls2, node_decls_map = gen_poly_decls_expr ctx gids caller_nname node_decls_map expr2 in 

@@ -340,8 +340,16 @@ let no_mismatched_clock is_bool e =
       check_clocks clock e2
     | RecordProject (_, e, _) | UnaryOp (_, _, e)
     | ConvOp (_, _, e) | Pre (_, e, None) | Extract (_, e, _, _) | Quantifier (_, _, _, e) 
-    | AnyOp (_, _, e) | ChooseOp (_, _, e) | StructUpdate (_, e, _, None, _) -> check_clocks clock e
-    | BinaryOp (_, _, e1, e2) | StructUpdate (_, e1, _, Some e2, _)
+    | AnyOp (_, _, e) | ChooseOp (_, _, e) | StructUpdate (_, e, _, None, None) -> check_clocks clock e
+    | StructUpdate (_, e, _, None, Some (ty1, ty2)) ->
+      (LH.fold_lustre_ty (check_clocks clock) (R.ok ()) (>>) ty1) >>
+      (LH.fold_lustre_ty (check_clocks clock) (R.ok ()) (>>) ty2) >>
+      check_clocks clock e
+    | StructUpdate (_, e1, _, Some e2, Some (ty1, ty2)) ->
+      (LH.fold_lustre_ty (check_clocks clock) (R.ok ()) (>>) ty1) >>
+      (LH.fold_lustre_ty (check_clocks clock) (R.ok ()) (>>) ty2) >>
+      check_clocks clock e1 >> check_clocks clock e2
+    | BinaryOp (_, _, e1, e2) | StructUpdate (_, e1, _, Some e2, None)
     | CompOp (_, _, e1, e2) | Arrow (_, e1, e2, None) | IndexAccess (_, e1, e2, _)
     | ArrayConstr (_, e1, e2) -> check_clocks clock e1 >> check_clocks clock e2
     | TernaryOp (_, _, e1, e2, e3) -> 
@@ -390,8 +398,16 @@ let no_mismatched_clock is_bool e =
       check_merge e2
     | RecordProject (_, e, _) | UnaryOp (_, _, e)
     | ConvOp (_, _, e) | Pre (_, e, None) | Extract (_, e, _, _) | Quantifier (_, _, _, e) 
-    | AnyOp (_, _, e) | ChooseOp (_, _, e) | When (_, e, _) | StructUpdate (_, e, _, None, _) -> check_merge e
-    | BinaryOp (_, _, e1, e2) | StructUpdate (_, e1, _, Some e2, _)
+    | AnyOp (_, _, e) | ChooseOp (_, _, e) | When (_, e, _) | StructUpdate (_, e, _, None, None) -> check_merge e
+    | StructUpdate (_, e, _, None, Some (ty1, ty2)) ->
+      (LH.fold_lustre_ty check_merge (R.ok ()) (>>) ty1) >>
+      (LH.fold_lustre_ty check_merge (R.ok ()) (>>) ty2) >>
+      check_merge e
+    | StructUpdate (_, e1, _, Some e2, Some (ty1, ty2)) ->
+      (LH.fold_lustre_ty check_merge (R.ok ()) (>>) ty1) >>
+      (LH.fold_lustre_ty check_merge (R.ok ()) (>>) ty2) >>
+      check_merge e1 >> check_merge e2
+    | BinaryOp (_, _, e1, e2) | StructUpdate (_, e1, _, Some e2, None)
     | CompOp (_, _, e1, e2) | Arrow (_, e1, e2, None) | IndexAccess (_, e1, e2, _)
     | ArrayConstr (_, e1, e2) -> check_merge e1 >> check_merge e2
     | TernaryOp (_, _, e1, e2, e3) -> 
@@ -544,8 +560,16 @@ let rec infer_const_attr ctx exp =
       (List.map r es)
   | GroupExpr (_, ExprList, es) -> List.flatten (List.map r es)
   (* Update of structured expressions *)
-  | StructUpdate (_, e1, _, Some e2, _) -> combine (r e1) (r e2)
-  | StructUpdate (_, e1, _, None, _) -> r e1
+  | StructUpdate (_, e1, _, Some e2, None) -> combine (r e1) (r e2)
+  | StructUpdate (_, e1, _, Some e2, Some (ty1, ty2)) ->
+    combine (r e1) (combine (r e2)
+      (combine (LH.fold_lustre_ty r [R.ok ()] combine ty1)
+               (LH.fold_lustre_ty r [R.ok ()] combine ty2)))
+  | StructUpdate (_, e1, _, None, None) -> r e1
+  | StructUpdate (_, e1, _, None, Some (ty1, ty2)) ->
+    combine (r e1)
+      (combine (LH.fold_lustre_ty r [R.ok ()] combine ty1)
+               (LH.fold_lustre_ty r [R.ok ()] combine ty2))
   | ArrayConstr (_, e1, e2) -> combine (r e1) (r e2)
   | IndexAccess (_, e1, e2, _) -> combine (r e1) (r e2)
   (* Quantified expressions *)
@@ -762,13 +786,24 @@ let rec instantiate_type_variables_expr: tc_context -> NI.t -> tc_type list -> L
   | GroupExpr (pos, kind, expr_list) ->
     let* expr_list = R.seq (List.map call expr_list) in
     R.ok (LA.GroupExpr (pos, kind, expr_list))
-  | StructUpdate (pos, e1, idx, Some e2, ta) ->
+  | StructUpdate (pos, e1, idx, Some e2, None) ->
     let* e1 = call e1 in 
     let* e2 = call e2 in
-    R.ok (LA.StructUpdate (pos, e1, idx, Some e2, ta))
-  | StructUpdate (pos, e1, idx, None, ta) ->
+    R.ok (LA.StructUpdate (pos, e1, idx, Some e2, None))
+  | StructUpdate (pos, e1, idx, Some e2, Some (ty1, ty2)) ->
     let* e1 = call e1 in 
-    R.ok (LA.StructUpdate (pos, e1, idx, None, ta))
+    let* e2 = call e2 in
+    let* ty1 = instantiate_type_variables ctx pos nname ty1 ty_args in
+    let* ty2 = instantiate_type_variables ctx pos nname ty2 ty_args in
+    R.ok (LA.StructUpdate (pos, e1, idx, Some e2, Some (ty1, ty2)))
+  | StructUpdate (pos, e1, idx, None, None) ->
+    let* e1 = call e1 in 
+    R.ok (LA.StructUpdate (pos, e1, idx, None, None))
+  | StructUpdate (pos, e1, idx, None, Some (ty1, ty2)) ->
+    let* e1 = call e1 in 
+    let* ty1 = instantiate_type_variables ctx pos nname ty1 ty_args in
+    let* ty2 = instantiate_type_variables ctx pos nname ty2 ty_args in
+    R.ok (LA.StructUpdate (pos, e1, idx, None, Some (ty1, ty2)))
   | ArrayConstr (pos, e1, e2) ->
     let* e1 = call e1 in 
     let* e2 = call e2 in
@@ -2492,9 +2527,13 @@ and expr_contains_set_binop ctx ni expr =
   | EmptySet (_, Some ty) -> LH.fold_lustre_ty r false (||) ty
   | RecordProject (_, e, _) | UnaryOp (_, _, e)
   | ConvOp (_, _, e) | When (_, e, _) | Pre (_, e, None) 
-  | Extract (_, e, _, _) | StructUpdate (_, e, _, None, _)
+  | Extract (_, e, _, _) | StructUpdate (_, e, _, None, None)
     -> r e
-  | BinaryOp (_, _, e1, e2) | CompOp (_, _, e1, e2) | StructUpdate (_, e1, _, Some e2, _)
+  | StructUpdate (_, e, _, None, Some (ty1, ty2)) ->
+    LH.fold_lustre_ty r false (||) ty1 || LH.fold_lustre_ty r false (||) ty2 || r e
+  | StructUpdate (_, e1, _, Some e2, Some (ty1, ty2)) ->
+    LH.fold_lustre_ty r false (||) ty1 || LH.fold_lustre_ty r false (||) ty2 || r e1 || r e2
+  | BinaryOp (_, _, e1, e2) | CompOp (_, _, e1, e2) | StructUpdate (_, e1, _, Some e2, None)
   | ArrayConstr (_, e1, e2) | IndexAccess (_, e1, e2, _) | Arrow (_, e1, e2, None)
     -> r e1 || r e2
   | TernaryOp (_, _, e1, e2, e3)
