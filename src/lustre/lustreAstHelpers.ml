@@ -2086,7 +2086,7 @@ let pos_of_type ty = match ty with
 
 let rec find_type_annotation e = match e with 
 | StructUpdate (_, e, _, _) -> find_type_annotation e
-| EmptySet (_, ta) -> ta
+| EmptySet (p, Some ty) -> Some (Set (p, ty))
 | EmptyMap (p, Some (kt, vt)) -> Some (Map (p, kt, vt))
 | _ -> None
 

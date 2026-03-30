@@ -412,7 +412,7 @@ let rec pp_print_expr ppf =
  
     | GroupExpr (p, ExprList, l) -> Format.fprintf ppf "%a@[<hv 1>(%a)@]" ppos p pl l
 
-    | GroupExpr (p, TupleExpr, l) -> Format.fprintf ppf "%a@[<hv 1>{%a}@]" ppos p pl l
+    | GroupExpr (p, TupleExpr, l) -> Format.fprintf ppf "%a@[<hv 1>'(%a)@]" ppos p pl l
 
     | GroupExpr (p, ArrayExpr, l) -> Format.fprintf ppf "%a@[<hv 1>[%a]@]" ppos p pl l
 

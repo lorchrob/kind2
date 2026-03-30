@@ -71,12 +71,12 @@ fun ctx node_name fun_ids ty ->
     let e, gen_nodes2 = desugar_expr ctx node_name fun_ids e in
     RefinementType (p1, (p2, id, ty), e), gen_nodes1 @ gen_nodes2
 
-and desugar_expr: Ctx.tc_context -> NI.t -> NI.t list -> A.expr -> A.expr * A.declaration list =
-fun ctx node_name fun_ids expr -> 
+and desugar_expr =
+fun ?(gen_type_ascription = true) ctx node_name fun_ids expr -> 
   let rec_call = desugar_expr ctx node_name fun_ids in
   match expr with
   | TypeAscription (pos, e, ty) ->
-    let e, gen_nodes1 = rec_call e in
+    let e, gen_nodes1 = desugar_expr ~gen_type_ascription ctx node_name fun_ids e in
     let ty, gen_nodes2 = desugar_type ctx node_name fun_ids ty in
     let span = { A.start_pos = pos; A.end_pos = pos; } in
     let node_id = mk_fresh_fn_name pos node_name TypeAscription in
@@ -222,13 +222,23 @@ fun ctx node_name fun_ids expr ->
   | GroupExpr (pos, kind, expr_list) ->
     let expr_list, gen_nodes = List.map (rec_call) expr_list |> List.split in
     GroupExpr (pos, kind, expr_list), List.flatten gen_nodes
-  | StructUpdate (pos, e1, idx, Some e2) ->
-    let e1, gen_nodes1 = rec_call e1 in
-    let e2, gen_nodes2 = rec_call e2 in
-    StructUpdate (pos, e1, idx, Some e2), gen_nodes1 @ gen_nodes2
-  | StructUpdate (pos, e, idx, None) ->
-    let e, gen_nodes = rec_call e in
-    StructUpdate (pos, e, idx, None), gen_nodes 
+  | StructUpdate (pos, e1, idx, Some e2) as e ->
+    (match AH.find_type_annotation e1 with 
+    | Some ty when gen_type_ascription -> 
+      let e = A.TypeAscription (pos, e, ty) in 
+      desugar_expr ~gen_type_ascription:false ctx node_name fun_ids e 
+    | _ -> 
+      let e1, gen_nodes1 = desugar_expr ~gen_type_ascription:false ctx node_name fun_ids e1 in
+      let e2, gen_nodes2 = rec_call e2 in
+      StructUpdate (pos, e1, idx, Some e2), gen_nodes1 @ gen_nodes2)
+  | StructUpdate (pos, e', idx, None) as e ->
+    (match AH.find_type_annotation e with 
+    | Some ty when gen_type_ascription -> 
+      let e = A.TypeAscription (pos, e, ty) in 
+      desugar_expr ~gen_type_ascription:false ctx node_name fun_ids e 
+    | _ -> 
+      let e', gen_nodes = desugar_expr ~gen_type_ascription:false ctx node_name fun_ids e' in
+      StructUpdate (pos, e', idx, None), gen_nodes )
   | ArrayConstr (pos, e1, e2) ->
     let e1, gen_nodes1 = rec_call e1 in
     let e2, gen_nodes2 = rec_call e2 in

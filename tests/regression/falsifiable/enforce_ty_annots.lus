@@ -1,4 +1,4 @@
-node n () returns (set1, set2: set<[int, int]>; set3: set<int>; 
+(*node n () returns (set1: set<[int, int]>; set2: set<[int, int]>; set3: set<int>; 
                    map1, map2: map<[int, real], [int, real]>; map3: map<real, real>)
 let
   set1 = { '(-1, -1) }@<subtype { x: [int, int] | pre x[0] >= 0 }>;
@@ -10,4 +10,14 @@ let
   map2 = map[ '(-1, -1.0) := '(-1, -1.0); '(-2, -2.0) := '(-1, -1.0) ]
            @<subtype { x: [int, real] | x[1] >= 0.0 }, subtype { x: [int, real] | pre x[0] >= 0 }>;
   map3 = map[ -1.0 := -1.0 ]@<subtype { x: real | x >= 0.0 }, subtype { x: real | x >= 0.0 }>;
+tel*)
+
+(*node N (inp: set<subtype {x: [int, int] | pre x[0] >= 0}>) returns (out: set<[int,int]>)
+let
+  out = inp;
+tel*)
+
+node N (inp: map<subtype {x: [int, int] | pre x[0] >= 0}, bool>) returns (out: map<[int,int], bool>)
+let
+  out = inp;
 tel
