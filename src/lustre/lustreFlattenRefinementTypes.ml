@@ -42,12 +42,12 @@ let mk_error pos kind = Error (`LustreFlattenRefinementTypesError (pos, kind))
 
 
 let rec flatten_ref_type ctx ty = match ty with
-  | A.UserType (pos, ty_args, str) ->
+  | A.UserType (pos, ty_args, str, k) ->
     let ty = TypeCheckerContext.lookup_ty_syn ctx str ty_args in
     (match ty with
-    | Some (A.ADT _) -> Ok (A.UserType (pos, ty_args, str))
+    | Some (A.ADT _) -> Ok (A.UserType (pos, ty_args, str, k))
     | Some ty -> flatten_ref_type ctx ty
-    | None -> Ok (A.UserType (pos, ty_args, str)))
+    | None -> Ok (A.UserType (pos, ty_args, str, k)))
   | RecordType (pos, id, tis) ->
     let* tis = Res.seq (List.map (fun (p, id, ty) ->
       let* ty = flatten_ref_type ctx ty in Ok (p, id, ty)
@@ -69,7 +69,7 @@ let rec flatten_ref_type ctx ty = match ty with
   | RefinementType (pos, (pos2, id, ty), expr) ->
     let* ty = flatten_ref_type ctx ty in
     let bound_var_is_adt = match ty with
-      | A.UserType (_, ty_args, str) ->
+      | A.UserType (_, ty_args, str, _) ->
         (match TypeCheckerContext.lookup_ty_syn ctx str ty_args with
         | Some (A.ADT _) -> true
         | _ -> false)
@@ -186,11 +186,11 @@ let rec flatten_ref_type ctx ty = match ty with
         A.BinaryOp (pos, A.And, A.CompOp (pos, A.Lte, lb, bound_var), A.CompOp (pos, A.Lte, bound_var, ub)))))
   | Int _ | Bool _ | IntRange _ | Real _ | AbstractType _ | EnumType _
   | History _ | TArr _ | SBitVector _ | UBitVector _ -> Ok ty
-  | ADT (pos, name, cons) ->
+  | ADT (pos, name, k, cons) ->
     let* cons = Res.seq (List.map (fun (ctor, tys) ->
       let* tys = Res.seq (List.map (flatten_ref_type ctx) tys) in Ok (ctor, tys)
     ) cons) in
-    Ok (A.ADT (pos, name, cons))
+    Ok (A.ADT (pos, name, k, cons))
 
 let flatten_ref_types_local_decl ctx = function
   | A.NodeConstDecl (pos, FreeConst (pos2, id, ty)) ->
@@ -287,8 +287,8 @@ let rec flatten_ref_types_expr: TypeCheckerContext.tc_context -> A.expr -> (A.ex
     let* e = rc e in
     let* arms = Res.seq (List.map (fun (pat, arm_e) -> let* e = rc arm_e in Ok (pat, e)) arms) in
     Ok (Match (p, e, arms, ty_opt))
-  | ADTTerm (p, ctor, args) ->
-    let* args = Res.seq (List.map rc args) in Ok (ADTTerm (p, ctor, args))
+  | ADTTerm (p, ctor, k, args) ->
+    let* args = Res.seq (List.map rc args) in Ok (ADTTerm (p, ctor, k, args))
 
 let flatten_ref_types_item ctx item =
   match item with

@@ -141,7 +141,7 @@ let rec unannot_pos = function
   | A.UBitVector (_, s) -> A.UBitVector (dpos, s)
   | A.IntRange (_,e1,e2) -> A.IntRange (dpos,e1,e2)
   | A.Real _ -> A.Real dpos
-  | A.UserType (_,ps,id) -> A.UserType (dpos,ps,id)
+  | A.UserType (_,ps,id,k) -> A.UserType (dpos,ps,id,k)
   | A.AbstractType (_, id) -> A.AbstractType (dpos,id)
   | A.TupleType (_,ts) -> A.TupleType (dpos, List.map unannot_pos ts)
   | A.GroupType (_,ts) -> A.GroupType (dpos, List.map unannot_pos ts)
@@ -155,8 +155,8 @@ let rec unannot_pos = function
   | A.RefinementType (_,id,e) -> RefinementType (dpos,id,e)
   | A.Map (_, ty1, ty2) -> Map (dpos, unannot_pos ty1, unannot_pos ty2)
   | A.Set (_, ty) -> Set (dpos, unannot_pos ty)
-  | A.ADT (_, id, cons) -> 
-    A.ADT (dpos, id, List.map (fun (id, tys) -> id, List.map unannot_pos tys) cons)
+  | A.ADT (_, id, k, cons) ->
+    A.ADT (dpos, id, k, List.map (fun (id, tys) -> id, List.map unannot_pos tys) cons)
 let rand_function_name_for _ ts =
   let ts = List.map unannot_pos ts in
   begin
@@ -205,7 +205,7 @@ let parametric_rand_node nb_outputs =
   let ts = aux "t" [] nb_outputs in
   let outs = aux "out" [] nb_outputs
   |> List.map2 (fun t out ->
-    dpos,out,A.UserType (dpos, t),A.ClockTrue) ts
+    dpos,out,A.UserType (dpos, [], HString.mk_hstring t, None),A.ClockTrue) ts
   in
   let ts = List.map (fun str -> A.TypeParam str) ts in
   A.NodeDecl (dspan,
@@ -274,8 +274,8 @@ let rec minimize_node_call_args ue lst expr =
     | A.TypeAscription (p, e, ty) -> A.TypeAscription (p, aux e, ty)
     | A.Match (p, e, arms, ty_opt) ->
       A.Match (p, aux e, List.map (fun (pat, arm_e) -> (pat, aux arm_e)) arms, ty_opt)
-    | A.ADTTerm (p, ctor, args) ->
-      A.ADTTerm (p, ctor, List.map aux args)
+    | A.ADTTerm (p, ctor, k, args) ->
+      A.ADTTerm (p, ctor, k, List.map aux args)
   in aux expr
 
 and ast_contains p ast =
@@ -316,7 +316,7 @@ and ast_contains p ast =
       |> List.exists (fun x -> x)
     | A.Match (_,e,arms,_) ->
       aux e || List.exists (fun (_,arm_e) -> aux arm_e) arms
-    | A.ADTTerm (_,_,args) ->
+    | A.ADTTerm (_,_,_,args) ->
       List.exists aux args
   in
   aux ast

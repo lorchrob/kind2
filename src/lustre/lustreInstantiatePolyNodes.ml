@@ -299,7 +299,7 @@ and gen_poly_decls_ty: Ctx.tc_context -> GI.t NI.Map.t -> NI.t option -> (A.decl
     let ctx, gids, ty, decls1, node_decls_map = gen_poly_decls_ty ctx gids node_id node_decls_map ty in 
     let ctx, gids, expr, decls2, node_decls_map = gen_poly_decls_expr ctx gids node_id node_decls_map expr in 
     ctx, gids, RefinementType (p, (p2, id, ty), expr), decls1 @ decls2, node_decls_map
-  | ADT (p, id, cons) ->
+  | ADT (p, id, k, cons) ->
     let ctx, gids, cons, decls, node_decls_map = List.fold_left (fun (ctx, gids, acc_cons, acc_decls, acc_node_decls_map) (cname, tys) ->
       let ctx, gids, tys, decls, node_decls_map = List.fold_left (fun (ctx, gids, acc_tys, acc_decls, acc_node_decls_map) ty ->
         let ctx, gids, ty, decls, node_decls_map = gen_poly_decls_ty ctx gids node_id acc_node_decls_map ty in
@@ -307,7 +307,7 @@ and gen_poly_decls_ty: Ctx.tc_context -> GI.t NI.Map.t -> NI.t option -> (A.decl
       ) (ctx, gids, [], acc_decls, acc_node_decls_map) tys in
       ctx, gids, acc_cons @ [(cname, tys)], decls, node_decls_map
     ) (ctx, gids, [], [], node_decls_map) cons in
-    ctx, gids, ADT (p, id, cons), decls, node_decls_map
+    ctx, gids, ADT (p, id, k, cons), decls, node_decls_map
   | Bool _ | Int _ | IntRange _ | Real _ | UserType _
   | AbstractType _ | EnumType _ | History _ | SBitVector _ | UBitVector _ -> ctx, gids, ty, [], node_decls_map
 
@@ -353,7 +353,7 @@ and gen_poly_decls_expr: Ctx.tc_context -> GI.t NI.Map.t -> NI.t option -> (A.de
         let ty_vars = List.map (Ctx.ty_vars_of_type ctx caller_nname) (ty :: tys) in
         List.fold_left Ctx.SI.union Ctx.SI.empty ty_vars
         |> Ctx.SI.elements
-        |> List.map (fun ty_var -> A.UserType (pos, [], ty_var))
+        |> List.map (fun ty_var -> A.UserType (pos, [], ty_var, None))
     in
     ctx, gids, Call (pos, ty_args, pnname, exprs), decls2 @ decls1, node_decls_map
   | Call (pos, [], node_id, exprs) ->
@@ -493,12 +493,12 @@ and gen_poly_decls_expr: Ctx.tc_context -> GI.t NI.Map.t -> NI.t option -> (A.de
       ctx, gids, acc_arms @ [(pat, arm_e)], decls @ acc_decls, node_decls_map
     ) (ctx, gids, [], decls1, node_decls_map) arms in
     ctx, gids, Match (p, e, arms, ty_opt), decls, node_decls_map
-  | ADTTerm (p, ctor, args) ->
+  | ADTTerm (p, ctor, k, args) ->
     let ctx, gids, args, decls, node_decls_map = List.fold_left (fun (ctx, gids, acc_args, acc_decls, acc_node_decls_map) arg ->
       let ctx, gids, arg, decls, node_decls_map = gen_poly_decls_expr ctx gids caller_nname acc_node_decls_map arg in
       ctx, gids, acc_args @ [arg], decls @ acc_decls, node_decls_map
     ) (ctx, gids, [], [], node_decls_map) args in
-    ctx, gids, ADTTerm (p, ctor, args), decls, node_decls_map
+    ctx, gids, ADTTerm (p, ctor, k, args), decls, node_decls_map
 
 and gen_poly_decls_ni
 = fun ctx gids node_id node_decls_map ni -> match ni with 

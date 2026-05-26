@@ -275,8 +275,8 @@ and push_pre is_guarded pos =
   | Match (p, e, arms, ty_opt) ->
     let arms' = List.map (fun (pat, body) -> (pat, r body)) arms in
     Match (p, r e, arms', ty_opt)
-  | ADTTerm (p, ctor, args) ->
-    ADTTerm (p, ctor, List.map r args)
+  | ADTTerm (p, ctor, k, args) ->
+    ADTTerm (p, ctor, k, List.map r args)
 
 and simplify_expr ?(is_guarded = false) ?(ind_vars = []) ctx =
   function
@@ -421,10 +421,10 @@ and inline_constants_of_lustre_type ?(ind_vars = []) ctx ty = match ty with
     let expr' = simplify_expr ~ind_vars ctx expr in
     RefinementType (pos, (pos2, id, ty'), expr')
     
-  | ADT (pos, name, cons) ->
+  | ADT (pos, name, k, cons) ->
     let cons' = List.map (fun (ctor, tys) ->
         (ctor, List.map (inline_constants_of_lustre_type ~ind_vars ctx) tys)) cons in
-    ADT (pos, name, cons')
+    ADT (pos, name, k, cons')
   | History _ | Int _ | Bool _ | Real _
   | UserType _ | AbstractType _ | EnumType _ | SBitVector _ | UBitVector _ -> ty
 

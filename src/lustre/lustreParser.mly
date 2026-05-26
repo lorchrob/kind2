@@ -371,10 +371,16 @@ type_decl:
 
   (* Definition of an algebraic datatype *)
   | DATATYPE; l = ident_list; p = option(decl_static_params); EQUALS; option(BAR); cs = separated_nonempty_list(BAR, adt_constructor); SEMICOLON
-     { let p = match p with | None -> [] | Some p -> p in 
+     { let p = match p with | None -> [] | Some p -> p in
        List.map (fun e ->
            A.AliasType (mk_pos $startpos, e, p,
-                        A.ADT (mk_pos $startpos, e, cs))) l }
+                        A.ADT (mk_pos $startpos, e, None, cs))) l }
+
+  (* Definition of a bounded recursive algebraic datatype: datatype Name[k] = ... *)
+  | DATATYPE; n = ident; LSQBRACKET; k = NUMERAL; RSQBRACKET; EQUALS; option(BAR); cs = separated_nonempty_list(BAR, adt_constructor); SEMICOLON
+     { [A.AliasType (mk_pos $startpos, n, [],
+                     A.ADT (mk_pos $startpos, n,
+                            Some (int_of_string (HString.string_of_hstring k)), cs))] }
 
   (* A record type, can only be defined as alias *)
   | TYPE; l = ident_list; EQUALS; t = record_type; SEMICOLON
@@ -432,7 +438,12 @@ lustre_type:
     { A.Map (mk_pos $startpos, ty1, ty2) }
 
   (* User-defined type *)
-  | s = ident; ps = type_static_params { A.UserType (mk_pos $startpos, ps, s) }
+  | s = ident; ps = type_static_params { A.UserType (mk_pos $startpos, ps, s, None) }
+
+  (* Depth-annotated user-defined type: Name@[k] *)
+  | s = ident; ATSIGN; LSQBRACKET; k = NUMERAL; RSQBRACKET
+    { A.UserType (mk_pos $startpos, [], s,
+                  Some (int_of_string (HString.string_of_hstring k))) }
 
   (* Tuple type *)
   | t = tuple_type { A.TupleType (mk_pos $startpos, t) } 
@@ -493,10 +504,17 @@ adt_constructor:
 
 (* A pattern in a match arm *)
 pat:
-  | i = ident 
-    { A.Pat (mk_pos $startpos, i, []) }
+  | i = ident
+    { A.Pat (mk_pos $startpos, i, None, []) }
   | c = ident; LPAREN; ps = separated_nonempty_list(COMMA, pat); RPAREN
-    { A.Pat (mk_pos $startpos, c, ps) }
+    { A.Pat (mk_pos $startpos, c, None, ps) }
+  | c = ident; ATSIGN; LSQBRACKET; k = NUMERAL; RSQBRACKET
+    { A.Pat (mk_pos $startpos, c,
+             Some (int_of_string (HString.string_of_hstring k)), []) }
+  | c = ident; ATSIGN; LSQBRACKET; k = NUMERAL; RSQBRACKET;
+    LPAREN; ps = separated_nonempty_list(COMMA, pat); RPAREN
+    { A.Pat (mk_pos $startpos, c,
+             Some (int_of_string (HString.string_of_hstring k)), ps) }
 
 (* A single arm of a match expression *)
 match_arm:
@@ -1272,6 +1290,17 @@ pexpr(Q):
       fail_at_position pos "Unsupported operator: fby" }
 
   | e1 = pexpr(Q); ARROW; e2 = pexpr(Q) { A.Arrow (mk_pos $startpos, e1, e2) }
+
+  (* Depth-annotated ADT constructor: Ctor@[k](args) *)
+  | s = ident; ATSIGN; LSQBRACKET; k = NUMERAL; RSQBRACKET;
+    LPAREN; a = separated_list(COMMA, expr); RPAREN
+    { A.ADTTerm (mk_pos $startpos, s,
+                 Some (int_of_string (HString.string_of_hstring k)), a) }
+
+  (* Depth-annotated nullary ADT constructor: Ctor@[k] *)
+  | s = ident; ATSIGN; LSQBRACKET; k = NUMERAL; RSQBRACKET
+    { A.ADTTerm (mk_pos $startpos, s,
+                 Some (int_of_string (HString.string_of_hstring k)), []) }
 
   (* A node or function call *)
   | e = node_call { e }

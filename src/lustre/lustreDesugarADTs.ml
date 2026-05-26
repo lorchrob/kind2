@@ -92,13 +92,13 @@ let build_adt_info type_name ctors =
 let build_adt_map decls =
   List.fold_left (fun m decl ->
     match decl with
-    | LA.TypeDecl (_, LA.AliasType (_, name, _, LA.ADT (_, _, ctors))) ->
+    | LA.TypeDecl (_, LA.AliasType (_, name, _, LA.ADT (_, _, _, ctors))) ->
       HStringMap.add name (build_adt_info name ctors) m
     | _ -> m
   ) HStringMap.empty decls
 
 let record_type_of_adt pos info =
-  let disc_fld = (pos, info.disc_field, LA.UserType (pos, [], info.disc_enum)) in
+  let disc_fld = (pos, info.disc_field, LA.UserType (pos, [], info.disc_enum, None)) in
   let payload_flds =
     List.map (fun (fname, ftype) -> (pos, fname, ftype)) info.all_payload_fields
   in
@@ -118,8 +118,8 @@ let tag_of pos info scrut =
 
 let adt_info_of_type adt_map ty =
   match ty with
-  | LA.UserType (_, _, name) -> HStringMap.find_opt name adt_map
-  | LA.ADT (_, name, _) -> HStringMap.find_opt name adt_map
+  | LA.UserType (_, _, name, _) -> HStringMap.find_opt name adt_map
+  | LA.ADT (_, name, _, _) -> HStringMap.find_opt name adt_map
   | _ -> None
 
 (* Replace every ADT type with its desugared record equivalent. *)
@@ -133,8 +133,8 @@ let rec desugar_type pos adt_map ty =
     | LA.SBitVector _ | LA.UBitVector _
     | LA.IntRange _ | LA.AbstractType _
     | LA.EnumType _ | LA.History _ -> ty
-    | LA.UserType (p, params, name) ->
-      LA.UserType (p, List.map ds params, name)
+    | LA.UserType (p, params, name, k) ->
+      LA.UserType (p, List.map ds params, name, k)
     | LA.TupleType (p, ts) -> LA.TupleType (p, List.map ds ts)
     | LA.GroupType (p, ts) -> LA.GroupType (p, List.map ds ts)
     | LA.RecordType (p, n, fields) ->
@@ -151,7 +151,7 @@ let rec desugar_type pos adt_map ty =
 (* Recursively collect the conjunction of tag equality conditions and the
    variable->field-projection substitutions imposed by a (possibly nested)
    constructor pattern.  Returns (conditions, substitutions). *)
-let rec collect_pattern_constraints pos adt_map info scrut (LA.Pat (_, name, sub_pats)) =
+let rec collect_pattern_constraints pos adt_map info scrut (LA.Pat (_, name, _, sub_pats)) =
   if List.mem name info.ctor_variants then
     let ctor = name in
     let outer_cond =
@@ -165,7 +165,7 @@ let rec collect_pattern_constraints pos adt_map info scrut (LA.Pat (_, name, sub
     let sub_conds, sub_subs =
       List.fold_left2 (fun (conds, subs) (fname, ftype) sub_pat ->
         let field_expr = LA.RecordProject (pos, scrut, fname) in
-        let LA.Pat (_, sub_name, _) = sub_pat in
+        let LA.Pat (_, sub_name, _, _) = sub_pat in
         match adt_info_of_type adt_map ftype with
         | Some sub_info when List.mem sub_name sub_info.ctor_variants ->
           let (c, s) = collect_pattern_constraints pos adt_map sub_info field_expr sub_pat in
@@ -205,7 +205,7 @@ let rec build_ite pos arms =
 let update_context adt_map ctx =
   HStringMap.fold (fun type_name info acc_ctx ->
     let pos = Lib.dummy_pos in
-    let enum_user_ty = LA.UserType (pos, [], info.disc_enum) in
+    let enum_user_ty = LA.UserType (pos, [], info.disc_enum, None) in
     let enum_ty = LA.EnumType (pos, info.disc_enum, info.ctor_variants) in
     let acc_ctx = Ctx.add_enum_variants acc_ctx info.disc_enum info.ctor_variants in
     let acc_ctx = Ctx.add_ty_syn acc_ctx info.disc_enum enum_ty in
@@ -233,7 +233,7 @@ let desugar_adts_program ctx decls =
   else
     let decls = List.concat_map (fun decl ->
       match decl with
-      | LA.TypeDecl (sp, LA.AliasType (_, name, ty_params, LA.ADT (pos, _, _))) ->
+      | LA.TypeDecl (sp, LA.AliasType (_, name, ty_params, LA.ADT (pos, _, _, _))) ->
         (match HStringMap.find_opt name adt_map with
         | Some info ->
           let enum_ty = LA.EnumType (pos, info.disc_enum, info.ctor_variants) in

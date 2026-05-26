@@ -350,7 +350,7 @@ let rec mk_graph_type: LA.lustre_type -> dependency_analysis_data = function
       | Some e2 -> mk_graph_expr e2
     in
     union_dependency_analysis_data g1 g2
-  | UserType (pos, ty_args, i) -> (
+  | UserType (pos, ty_args, i, _) -> (
     let usr_g = singleton_dependency_analysis_data ty_prefix i pos in
     List.fold_left union_dependency_analysis_data usr_g (List.map mk_graph_type ty_args)
   )
@@ -367,7 +367,7 @@ let rec mk_graph_type: LA.lustre_type -> dependency_analysis_data = function
     let g_expr = remove (mk_graph_expr e) i in
     union_dependency_analysis_data (mk_graph_type ty) g_expr
   (* for the future: ADTs can be recursive; relax this check *)
-  | ADT (_, _name, cons) ->
+  | ADT (_, _name, _, cons) ->
     let tys = List.map snd cons |> List.flatten in
     let deps = List.fold_left union_dependency_analysis_data empty_dependency_analysis_data
       (List.map mk_graph_type tys) in
@@ -509,7 +509,7 @@ let rec get_node_call_from_expr: LA.expr -> (LA.ident * Lib.position) list
   | LA.Match (_, e, arms, _) ->
     get_node_call_from_expr e
     @ List.flatten (List.map (fun (_, body) -> get_node_call_from_expr body) arms)
-  | LA.ADTTerm (_, _, args) ->
+  | LA.ADTTerm (_, _, _, args) ->
     List.flatten (List.map get_node_call_from_expr args)
 (** Returns all the node calls from an expression *)
 
@@ -525,7 +525,7 @@ and extract_node_calls_type: LA.lustre_type -> (LA.ident * Lib.position) list
   | RecordType (_, _, tis) -> List.map (fun (_, _, ty) -> extract_node_calls_type ty) tis |> List.flatten
   | Int _ | SBitVector _ | UBitVector _ | Bool _ | Real _ | IntRange _
   | UserType _ | AbstractType _ | EnumType _ | History _ -> []
-  | ADT (_, _, cons) ->
+  | ADT (_, _, _, cons) ->
     let tys = List.map snd cons |> List.flatten in
     List.map extract_node_calls_type tys |> List.flatten
 (** Extracts all the node calls from a type *)
@@ -826,15 +826,15 @@ let rec vars_with_flattened_nodes: node_summary -> int -> LA.expr -> LA.SI.t
       | None -> SI.empty))
   | Match (_, e, arms, _) ->
     let rec pat_bound_vars = function
-      | LA.Pat (_, i, []) -> SI.singleton i
-      | LA.Pat (_, _, pats) -> SI.flatten (List.map pat_bound_vars pats)
+      | LA.Pat (_, i, _, []) -> SI.singleton i
+      | LA.Pat (_, _, _, pats) -> SI.flatten (List.map pat_bound_vars pats)
     in
     let arm_vars = List.fold_left (fun acc (pat, body) ->
         SI.union acc (SI.diff (r body) (pat_bound_vars pat))
       ) SI.empty arms
     in
     SI.union (r e) arm_vars
-  | ADTTerm (_, _, args) ->
+  | ADTTerm (_, _, _, args) ->
     SI.flatten (List.map r args)
 
 (** get all the variables and flatten node calls using
@@ -1073,7 +1073,7 @@ let rec mk_graph_expr2: node_summary -> LA.expr -> (dependency_analysis_data lis
         let fst = List.hd arm_exprs in
         graph_error (LH.pos_of_expr fst) (WidthLengthsUnequal (fst, bad_e))
     )
-  | LA.ADTTerm (_, _, args) ->
+  | LA.ADTTerm (_, _, _, args) ->
     let* gs = R.seq (List.map (mk_graph_expr2 m) args) in
     R.ok [List.fold_left union_dependency_analysis_data empty_dependency_analysis_data (List.concat gs)]
   | e -> Lib.todo (__LOC__ ^ " " ^ Lib.string_of_t Lib.pp_print_position (LH.pos_of_expr e))

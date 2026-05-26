@@ -168,7 +168,7 @@ let rec lookup_ty_syn: tc_context -> LA.ident -> tc_type list -> tc_type option
     in
     let ty = LustreAstHelpers.apply_type_subst_in_type sigma ty in
     match ty with
-    | LA.UserType (_, ty_args, uid) ->
+    | LA.UserType (_, ty_args, uid, _) ->
       if uid = i then Some ty
       else lookup_ty_syn ctx uid ty_args
     | _ -> Some ty
@@ -181,12 +181,12 @@ let rec lookup_ty_syn: tc_context -> LA.ident -> tc_type list -> tc_type option
 
 let rec expand_type_syn: tc_context -> tc_type -> tc_type
   = fun ctx -> function
-  | UserType (_, ty_args, i) as ty -> (
+  | UserType (_, ty_args, i, _) as ty -> (
     match IMap.find_opt i (ctx.ty_syns) with
     | None -> ty
     | Some inner -> (
       match inner with
-      | UserType (_, _, uid) when uid = i -> inner
+      | UserType (_, _, uid, _) when uid = i -> inner
       | _ -> (
         let ty_vars =
           match IMap.find_opt i (ctx.ty_ty_vars) with
@@ -282,7 +282,7 @@ let lookup_constructor: tc_context -> LA.ident -> (LA.ident * LA.lustre_type lis
       | Some _ -> acc
       | None ->
         (match ty with
-        | LA.ADT (_, _, cons) ->
+        | LA.ADT (_, _, _, cons) ->
           (match List.assoc_opt ctor cons with
           | Some field_tys -> Some (ty_name, field_tys)
           | None -> None)
@@ -342,7 +342,7 @@ let add_enum_variants: tc_context -> LA.ident -> LA.ident list -> tc_context
 
 let is_enum_variant ctx id =
   match lookup_const ctx id with
-  | Some (_, Some (UserType (_, _, uid)), _) ->
+  | Some (_, Some (UserType (_, _, uid, _)), _) ->
     lookup_variants ctx uid != None
   | _ -> false
 
@@ -730,13 +730,13 @@ let rec type_contains_subrange ctx = function
     (match lookup_ty ctx id with 
     | Some ty -> type_contains_subrange ctx ty
     | _ -> assert false)
-  | UserType (_, ty_args, id) -> (
+  | UserType (_, ty_args, id, _) -> (
     match lookup_ty_syn ctx id ty_args with
     | Some (ADT _) -> false
     | Some ty -> type_contains_subrange ctx ty
     | None -> assert false
   )
-  | ADT (_, _, cons) ->
+  | ADT (_, _, _, cons) ->
     let tys = List.concat_map snd cons in
     List.fold_left (fun acc ty -> acc || type_contains_subrange ctx ty) false tys
   | Bool _ | Int _ | Real _ | EnumType _
@@ -759,13 +759,13 @@ let rec type_contains_enum_or_subrange ctx = function
     (match lookup_ty ctx id with
     | Some ty -> type_contains_enum_or_subrange ctx ty
     | _ -> assert false)
-  | UserType (_, ty_args, id) -> (
+  | UserType (_, ty_args, id, _) -> (
     match lookup_ty_syn ctx id ty_args with
     | Some (ADT _) -> false
     | Some ty -> type_contains_enum_or_subrange ctx ty
     | None -> assert false
   )
-  | ADT (_, _, cons) ->
+  | ADT (_, _, _, cons) ->
     let tys = List.concat_map snd cons in
     List.fold_left (fun acc ty -> acc || type_contains_enum_or_subrange ctx ty) false tys
   | Bool _ | Int _ | Real _
@@ -786,13 +786,13 @@ let rec type_contains_enum_or_subrange ctx = function
     (match lookup_ty ctx id with 
       | Some ty -> type_contains_ref ctx ty
       | _ -> assert false)
-  | UserType (_, ty_args, id) -> (
+  | UserType (_, ty_args, id, _) -> (
     match lookup_ty_syn ctx id ty_args with
     | Some (ADT _) -> false
     | Some ty -> type_contains_ref ctx ty
     | None -> false
   )
-  | ADT (_, _, cons) ->
+  | ADT (_, _, _, cons) ->
     let tys = List.concat_map snd cons in
     List.fold_left (fun acc ty -> acc || type_contains_ref ctx ty) false tys
   | Bool _ | Int _ | Real _  | EnumType _ | IntRange _
@@ -818,20 +818,20 @@ let rec type_contains_enum_subrange_reftype ctx = function
     (match lookup_ty ctx id with 
       | Some ty -> type_contains_enum_subrange_reftype ctx ty
       | _ -> assert false)
-  | UserType (_, ty_args, id) -> (
+  | UserType (_, ty_args, id, _) -> (
     match lookup_ty_syn ctx id ty_args with
     | Some (ADT _) -> false
     | Some ty -> type_contains_enum_subrange_reftype ctx ty
     | None -> assert false
   )
-  | ADT (_, _, cons) ->
+  | ADT (_, _, _, cons) ->
     let tys = List.concat_map snd cons in
     List.fold_left (fun acc ty -> acc || type_contains_enum_subrange_reftype ctx ty) false tys
   | Bool _ | Int _ | Real _
   | AbstractType _ | SBitVector _ | UBitVector _ -> false
 
 let rec type_contains_abstract ctx = function
-  | LA.UserType (_, ty_args, id) ->
+  | LA.UserType (_, ty_args, id, _) ->
     (match lookup_ty_syn ctx id ty_args with
     | Some (AbstractType _)
     | None -> true
@@ -851,7 +851,7 @@ let rec type_contains_abstract ctx = function
     (match lookup_ty ctx id with
     | Some ty -> type_contains_abstract ctx ty
     | _ -> assert false)
-  | ADT (_, _, cons) ->
+  | ADT (_, _, _, cons) ->
     let tys = List.concat_map snd cons in
     List.fold_left (fun acc ty -> acc || type_contains_abstract ctx ty) false tys
   | Bool _ | Int _ | Real _ | EnumType _ | IntRange _
@@ -872,13 +872,13 @@ let rec type_contains_map_or_set ctx = function
     (match lookup_ty ctx id with
     | Some ty -> type_contains_map_or_set ctx ty
     | _ -> assert false)
-  | UserType (_, ty_args, id) -> (
+  | UserType (_, ty_args, id, _) -> (
     match lookup_ty_syn ctx id ty_args with
     | Some (ADT _) -> false
     | Some ty -> type_contains_map_or_set ctx ty
     | None -> false
   )
-  | ADT (_, _, cons) ->
+  | ADT (_, _, _, cons) ->
     let tys = List.concat_map snd cons in
     List.fold_left (fun acc ty -> acc || type_contains_map_or_set ctx ty) false tys
   | Bool _ | Int _ | Real _ | EnumType _ | IntRange _
@@ -899,13 +899,13 @@ let rec type_contains_array ctx = function
     (match lookup_ty ctx id with
     | Some ty -> type_contains_array ctx ty
     | _ -> assert false)
-  | UserType (_, ty_args, id) -> (
+  | UserType (_, ty_args, id, _) -> (
     match lookup_ty_syn ctx id ty_args with
     | Some (ADT _) -> false
     | Some ty -> type_contains_array ctx ty
     | None -> false
   )
-  | ADT (_, _, cons) ->
+  | ADT (_, _, _, cons) ->
     let tys = List.concat_map snd cons in
     List.fold_left (fun acc ty -> acc || type_contains_array ctx ty) false tys
   | Bool _ | Int _ | Real _ | EnumType _ | IntRange _
@@ -967,13 +967,13 @@ let rec ty_vars_of_expr ctx node_name expr =
   | Arrow (_, e1, e2) ->  SI.union (call e1) (call e2)
   | LA.Match (_, e, arms, _) ->
     SI.union (call e) (SI.flatten (List.map (fun (_, arm_e) -> call arm_e) arms))
-  | LA.ADTTerm (_, _, args) ->
+  | LA.ADTTerm (_, _, _, args) ->
     SI.flatten (List.map call args)
 
 and ty_vars_of_type ctx node_name ty = 
   let call = ty_vars_of_type ctx node_name in 
   match ty with
-  | UserType (_, ty_args, id) -> (
+  | UserType (_, ty_args, id, _) -> (
     match lookup_ty_syn ctx id ty_args with
     | Some (ADT _) -> SI.empty
     | Some ty -> ty_vars_of_type ctx node_name ty
@@ -1001,7 +1001,7 @@ and ty_vars_of_type ctx node_name ty =
       if List.mem id tvars then SI.singleton id
       else SI.empty
   )
-  | ADT (_, _, cons) ->
+  | ADT (_, _, _, cons) ->
     let tys = List.concat_map snd cons in
     List.fold_left (fun acc ty -> SI.union acc (ty_vars_of_type ctx node_name ty)) SI.empty tys
   | History _ | Int _ | Bool _ | IntRange _ | Real _  | EnumType _
@@ -1049,6 +1049,6 @@ let rec expr_contains_node_call ctx expr =
     node_id_is_node ctx ni
   | LA.Match (_, e, arms, _) ->
     r e || List.fold_left (fun acc (_, arm_e) -> acc || r arm_e) false arms
-  | LA.ADTTerm (_, _, args) ->
+  | LA.ADTTerm (_, _, _, args) ->
     List.fold_left (fun acc e -> acc || r e) false args
 

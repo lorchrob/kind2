@@ -303,7 +303,7 @@ function
   has_stateful_op ctx e ||
   List.fold_left (fun acc (_, body) -> acc || has_stateful_op ctx body) false arms
 
-| ADTTerm (_, _, args) ->
+| ADTTerm (_, _, _, args) ->
   List.fold_left (fun acc e -> acc || has_stateful_op ctx e) false args
 
 | StructUpdate (_, e1, li, e2) ->
@@ -332,7 +332,7 @@ let build_global_ctx (decls:LustreAst.t) =
   let over_decls acc = function
     | LA.TypeDecl (_, AliasType (_, _, _, (EnumType (_, _, variants) as ty))) ->
       List.fold_left (fun a v -> ctx_add_const a v (Some ty)) acc variants
-    | LA.TypeDecl (_, AliasType (_, _, _, ADT (_, _, cons))) ->
+    | LA.TypeDecl (_, AliasType (_, _, _, ADT (_, _, _, cons))) ->
       List.fold_left (fun a (ctor, _) ->
         ctx_add_constructor a ctor
       ) acc cons
@@ -717,7 +717,7 @@ let rec expr_only_supported_in_merge observer expr =
   | Match (_, e, arms, _) ->
     r observer e >>
     Res.seq_ (List.map (fun (_, body) -> r observer body) arms)
-  | ADTTerm (_, _, args) -> r_list observer args
+  | ADTTerm (_, _, _, args) -> r_list observer args
 
 let check_opacity pos node_id contract is_ext = function
   | LA.Opaque when contract = None -> syntax_error pos (OpaqueWithoutContract node_id)
@@ -748,10 +748,10 @@ and check_ty_node_calls i ty =
       >> if LAH.expr_contains_call e
         then syntax_error (LAH.pos_of_expr e) (NodeCallInGlobalTypeDecl i)
         else Ok ()
-    | UserType (_, tys, _) -> Res.seq_ (List.map (check_ty_node_calls i) tys)
+    | UserType (_, tys, _, _) -> Res.seq_ (List.map (check_ty_node_calls i) tys)
     | Map (_, ty1, ty2) -> Res.seq_ (List.map (check_ty_node_calls i) [ty1; ty2])
     | Set (_, ty) -> check_ty_node_calls i ty
-    | ADT (_, _, cons) ->
+    | ADT (_, _, _, cons) ->
       let tys = List.map snd cons |> List.flatten in
       Res.seq_ (List.map (check_ty_node_calls i) tys)
     | Bool _ | Int _ | IntRange _ | Real _ | EnumType _
@@ -1041,7 +1041,7 @@ and check_ty ctx f = function
 | Int _ | Bool _ | SBitVector _ | UBitVector _ | IntRange _
 | Real _ | AbstractType _ | UserType _ | EnumType _
 | History _ -> Res.ok []
-| ADT (_, _, cons) ->
+| ADT (_, _, _, cons) ->
   let tys = List.map snd cons |> List.flatten in
   let* warnings = Res.seq (List.map (check_ty ctx f) tys) in
   Res.ok (List.flatten warnings)
@@ -1050,9 +1050,9 @@ and check_ty ctx f = function
 
 and check_pattern_no_duplicates ctx pat =
   let rec collect = function
-    | LA.Pat (pos, id, []) ->
+    | LA.Pat (pos, id, _, []) ->
       if StringMap.mem id ctx.constructors then [] else [(pos, id)]
-    | LA.Pat (_, _, pats) -> List.concat_map collect pats
+    | LA.Pat (_, _, _, pats) -> List.concat_map collect pats
   in
   let rec check seen = function
     | [] -> Ok ()
@@ -1211,9 +1211,9 @@ and check_expr: context -> (context -> LA.expr -> ([> warning] list, ([> error] 
       let* warnings1 = check_expr ctx f e in
       let pat_vars pat =
         let rec collect = function
-          | LA.Pat (_, id, []) ->
+          | LA.Pat (_, id, _, []) ->
             if StringMap.mem id ctx.constructors then [] else [id]
-          | LA.Pat (_, _, pats) -> List.concat_map collect pats
+          | LA.Pat (_, _, _, pats) -> List.concat_map collect pats
         in collect pat
       in
       let* warnings2 = Res.seq (List.map (fun (pat, body) ->
@@ -1226,7 +1226,7 @@ and check_expr: context -> (context -> LA.expr -> ([> warning] list, ([> error] 
         Res.ok (warnings @ warnings')
       ) arms) in
       Ok (warnings1 @ List.flatten warnings2)
-    | ADTTerm (_, _, args) -> check_expr_list ctx f args
+    | ADTTerm (_, _, _, args) -> check_expr_list ctx f args
   in
   let* warnings1 = res in
   let* warnings2 = check expr in
@@ -1331,7 +1331,7 @@ and oqv_check_type tc_ctx inlinable_funcs is_nested ctx ty =
     let* warnings1 = oqv_check_type tc_ctx inlinable_funcs true ctx a in
     let* warnings2 = oqv_check_type tc_ctx inlinable_funcs true ctx r in
     Ok (warnings1 @ warnings2)
-  | LA.UserType (_, ty_args, _) ->
+  | LA.UserType (_, ty_args, _, _) ->
     let* warnings1 = Res.seq (List.map (oqv_check_type tc_ctx inlinable_funcs is_nested ctx) ty_args) in
     Ok (List.flatten warnings1)
   | LA.History (_, id) -> (
@@ -1350,7 +1350,7 @@ and oqv_check_type tc_ctx inlinable_funcs is_nested ctx ty =
   | LA.Int _ | LA.Bool _ | LA.Real _ | LA.SBitVector _ | LA.UBitVector _
   | LA.AbstractType _ | LA.EnumType _ ->
     Ok []
-  | LA.ADT (_, _, cons) ->
+  | LA.ADT (_, _, _, cons) ->
     let tys = List.map snd cons |> List.flatten in
     let* warnings = Res.seq (List.map (oqv_check_type tc_ctx inlinable_funcs is_nested ctx) tys) in
     Ok (List.flatten warnings)

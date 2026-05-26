@@ -783,7 +783,7 @@ and compile_ast_type
       let enum_elements = List.map HString.string_of_hstring enum_elements in
       let ty = Type.mk_enum enum_name enum_elements in
       X.singleton X.empty_index ty
-  | A.UserType (_, _, ident) ->
+  | A.UserType (_, _, ident, _) ->
     StringMap.find ident cstate.type_alias 
   | A.AbstractType (_, ident) ->
     let ident = HString.string_of_hstring ident in

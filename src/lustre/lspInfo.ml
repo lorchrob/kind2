@@ -26,7 +26,7 @@ let lsp_type_decl_json ppf ctx { Ast.start_pos = spos; Ast.end_pos = epos } tyd 
     let file, slnum, scnum = Lib.file_row_col_of_pos spos in
     let _, elnum, ecnum = Lib.file_row_col_of_pos epos in
     let ty_args = List.map (fun id -> LustreAst.AbstractType (p, id)) ps in
-    let ty = TypeCheckerContext.expand_type_syn ctx (LustreAst.UserType (p, ty_args, id)) in
+    let ty = TypeCheckerContext.expand_type_syn ctx (LustreAst.UserType (p, ty_args, id, None)) in
     let contains_ref = TypeCheckerContext.type_contains_ref ctx ty in
     Format.fprintf ppf
       ",@.{@[<v 1>@,\

@@ -175,7 +175,7 @@ let rec type_contains_adt ctx ty =
   let r = type_contains_adt ctx in
   match ty with
   | A.ADT _ -> true
-  | A.UserType (_, tys, name) ->
+  | A.UserType (_, tys, name, _) ->
     List.exists r tys ||
     (match Ctx.lookup_ty_syn ctx name tys with
     | Some (A.ADT _) -> true
@@ -228,7 +228,7 @@ let rec ty_contains_gids ctx ni ty =
     | Some e, None -> Chk.expr_contains_set_binop ctx ni e 
     | Some e1, Some e2 -> (Chk.expr_contains_set_binop ctx ni e1) || (Chk.expr_contains_set_binop ctx ni e2)
     )
-  | A.ADT (_, _, cons) ->
+  | A.ADT (_, _, _, cons) ->
     let tys = List.concat_map (fun (_, tys) -> tys) cons in
     List.fold_left (||) false (List.map r tys)
   | A.AbstractType _ | A.EnumType _

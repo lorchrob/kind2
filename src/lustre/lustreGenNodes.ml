@@ -70,12 +70,12 @@ fun ctx node_name fun_ids ty ->
     let ty, gen_nodes1 = r ty in
     let e, gen_nodes2 = desugar_expr ctx node_name fun_ids e in
     RefinementType (p1, (p2, id, ty), e), gen_nodes1 @ gen_nodes2
-  | ADT (p, name, constructors) ->
+  | ADT (p, name, k, constructors) ->
     let constructors, gen_nodes = List.map (fun (cname, tys) ->
       let tys, gen_nodes = List.map r tys |> List.split in
       (cname, tys), List.flatten gen_nodes
     ) constructors |> List.split in
-    ADT (p, name, constructors), List.flatten gen_nodes
+    ADT (p, name, k, constructors), List.flatten gen_nodes
 
 and desugar_expr: Ctx.tc_context -> NI.t -> NI.t list -> A.expr -> A.expr * A.declaration list =
 fun ctx node_name fun_ids expr -> 
@@ -98,7 +98,7 @@ fun ctx node_name fun_ids expr ->
                    (Ctx.ty_vars_of_expr ctx node_name e)
       |> Ctx.SI.elements
     in 
-    let ty_args = List.map (fun id -> A.UserType (pos, [], id)) ty_params in
+    let ty_args = List.map (fun id -> A.UserType (pos, [], id, None)) ty_params in
     let ty = Ctx.expand_type_syn ctx ty in
     let inputs = AH.vars_of_type ty |> Ctx.SI.elements in
     (* Global constants don't need to be passed as arguments to generated nodes *)
@@ -155,8 +155,8 @@ fun ctx node_name fun_ids expr ->
                    (Ctx.ty_vars_of_expr ctx node_name expr1)
       |> Ctx.SI.elements
     in 
-    let ty_vars = List.map (fun id -> A.UserType (pos, [], id)) ty_params in
-    let generated_node, name = match expr with 
+    let ty_vars = List.map (fun id -> A.UserType (pos, [], id, None)) ty_params in
+    let generated_node, name = match expr with
     | AnyOp _ -> 
         (* `any` operators are nondeterministic *)
         let name = mk_fresh_fn_name pos node_name Any in
@@ -286,9 +286,9 @@ fun ctx node_name fun_ids expr ->
       (pat, arm_e), gen_nodes
     ) arms |> List.split in
     Match (pos, e, arms, ty_opt), gen_nodes1 @ List.flatten gen_nodes2
-  | ADTTerm (pos, ctor, args) ->
+  | ADTTerm (pos, ctor, k, args) ->
     let args, gen_nodes = List.map rec_call args |> List.split in
-    ADTTerm (pos, ctor, args), List.flatten gen_nodes
+    ADTTerm (pos, ctor, k, args), List.flatten gen_nodes
 
 let desugar_contract_item: Ctx.tc_context -> NI.t -> NI.t list -> A.contract_node_equation -> A.contract_node_equation * A.declaration list =
 fun ctx node_name fun_ids ci ->
