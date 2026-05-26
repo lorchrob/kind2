@@ -124,6 +124,8 @@ type error_kind = Unknown of string
   | UnequalMatchArmTypes of tc_type * tc_type
   | DuplicateConstructor of HString.t * HString.t * HString.t
   | ConstructorNameClashWithConst of HString.t * HString.t
+  | UnannotatedBoundedADTType of HString.t
+  | UnannotatedBoundedADTCtor of HString.t
 
 type error = [
   | `LustreTypeCheckerError of Lib.position * error_kind
@@ -266,6 +268,12 @@ let error_message kind = match kind with
   | ConstructorNameClashWithConst (ctor, ty_name) ->
     "Constructor '" ^ HString.string_of_hstring ctor ^ "' in type '"
     ^ HString.string_of_hstring ty_name ^ "' has the same name as a declared constant"
+  | UnannotatedBoundedADTType name ->
+    "Type '" ^ HString.string_of_hstring name ^ "' is a bounded recursive ADT; "
+    ^ "use '" ^ HString.string_of_hstring name ^ "@[k]' to instantiate it at a specific depth"
+  | UnannotatedBoundedADTCtor ctor ->
+    "Constructor '" ^ HString.string_of_hstring ctor ^ "' belongs to a bounded recursive ADT; "
+    ^ "use '" ^ HString.string_of_hstring ctor ^ "@[k]' to instantiate it at a specific depth"
 
 type warning_kind = 
   | UnusedBoundVariableWarning of HString.t
@@ -1498,10 +1506,14 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
         | _ -> None
       in
       match pat with
-      | LA.Pat (pos, id, _, []) ->
+      | LA.Pat (pos, id, depth, []) ->
         let is_constructor = Option.is_some (lookup_constructor ctx id) in
         if is_constructor then (
-          match adt_opt with
+          let* _ = (match adt_opt with
+            | Some (LA.ADT (_, _, Some _, _)) when depth = None ->
+              type_error pos (UnannotatedBoundedADTCtor id)
+            | _ -> R.ok ()) in
+          (match adt_opt with
           | Some (LA.ADT (_, _, _, adt_cons)) ->
             (match List.assoc_opt id adt_cons with
             | Some [] -> R.ok ctx
@@ -1509,11 +1521,13 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
               type_error pos (ConstructorArityMismatch (id, List.length field_tys, 0))
             | None -> type_error pos (UnboundConstructor id)
             )
-          | _ -> type_error pos (UnboundConstructor id)
+          | _ -> type_error pos (UnboundConstructor id))
         ) else
           R.ok (add_ty ctx id field_ty)
-      | LA.Pat (pos, ctor, _, sub_pats) ->
+      | LA.Pat (pos, ctor, depth, sub_pats) ->
         (match adt_opt with
+        | Some (LA.ADT (_, _, Some _, _)) when depth = None ->
+          type_error pos (UnannotatedBoundedADTCtor ctor)
         | Some (LA.ADT (_, _, _, adt_cons)) ->
           (match List.assoc_opt ctor adt_cons with
           | None -> type_error pos (UnboundConstructor ctor)
@@ -1555,6 +1569,11 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
     (match lookup_constructor ctx ctor with
     | None -> type_error pos (UnboundConstructor ctor)
     | Some (ty_name, field_tys) ->
+      let* _ = (if k = None then
+        match lookup_ty_syn ctx ty_name [] with
+        | Some (LA.ADT (_, _, Some _, _)) -> type_error pos (UnannotatedBoundedADTCtor ctor)
+        | _ -> R.ok ()
+      else R.ok ()) in
       if List.length args <> List.length field_tys then
         type_error pos (ConstructorArityMismatch (ctor, List.length field_tys, List.length args))
       else
@@ -2840,13 +2859,15 @@ and check_type_well_formed: tc_context -> source -> NI.t option -> bool -> tc_ty
         R.seq (List.map (check_type_well_formed_rec is_nested) tys) |> R.map List.split 
       in 
       R.ok (LA.GroupType (p, tys), List.flatten warnings)
-    | LA.UserType (pos, ty_args, i, _) ->
+    | LA.UserType (pos, ty_args, i, depth_annotation) ->
       if (member_ty_syn ctx i || member_u_types ctx i)
       then (
         (* Check that we are passing the correct number of type arguments *)
         let* _ = instantiate_type_variables ctx pos (NI.mk_node_id i) ty' ty_args in
         let expanded = expand_type_syn ctx ty' in
         match expanded with
+        | LA.ADT (_, _, Some _, _) when depth_annotation = None ->
+          type_error pos (UnannotatedBoundedADTType i)
         | LA.ADT _ (* Already validated at declaration *)
         | LA.UserType _ -> R.ok (ty', [])
         | _ -> check_type_well_formed_rec is_nested expanded)
