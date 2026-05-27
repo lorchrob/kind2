@@ -310,7 +310,7 @@ let type_error pos kind = Error (`LustreTypeCheckerError (pos, kind))
 
 let check_bounded_adt_depth ctx pos k_expr =
   match IC.eval_int_expr ctx k_expr with
-  | Ok i when i >= 0 -> R.ok ()
+  | Ok i when i >= 0 -> R.ok i
   | _ -> type_error pos (InvalidBoundedADTDepth k_expr)
 
 (********************************
@@ -1531,7 +1531,7 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
               check_bounded_adt_depth ctx pos k_expr
             | Some _, _ ->
               type_error pos (BoundAnnotationOnNonBoundedCtor id)
-            | _ -> R.ok ()) in
+            | _ -> R.ok 0) in
           (match adt_opt with
           | Some (LA.ADT (_, _, _, adt_cons)) ->
             (match List.assoc_opt id adt_cons with
@@ -1551,7 +1551,7 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
             check_bounded_adt_depth ctx pos k_expr
           | Some _, _ ->
             type_error pos (BoundAnnotationOnNonBoundedCtor ctor)
-          | _ -> R.ok ()) in
+          | _ -> R.ok 0) in
         (match adt_opt with
         | Some (LA.ADT (_, _, _, adt_cons)) ->
           (match List.assoc_opt ctor adt_cons with
@@ -1594,23 +1594,32 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
     (match lookup_constructor ctx ctor with
     | None -> type_error pos (UnboundConstructor ctor)
     | Some (ty_name, field_tys) ->
-      let* _ = (match k with
+      let* (effective_field_tys, result_ty) = (match k with
         | None ->
           (match lookup_ty_syn ctx ty_name [] with
           | Some (LA.ADT (_, _, Some _, _)) -> type_error pos (UnannotatedBoundedADTCtor ctor)
-          | _ -> R.ok ())
+          | _ -> R.ok (field_tys, LA.UserType (pos, [], ty_name, None)))
         | Some k_expr ->
           (match lookup_ty_syn ctx ty_name [] with
-          | Some (LA.ADT (_, _, Some _, _)) -> check_bounded_adt_depth ctx pos k_expr
+          | Some (LA.ADT (_, _, Some _, _)) ->
+            let* k_val = check_bounded_adt_depth ctx pos k_expr in
+            let is_recursive = List.exists (function
+              | LA.UserType (_, _, n, _) -> n = ty_name | _ -> false) field_tys in
+            let child_k_val = if is_recursive then k_val - 1 else k_val in
+            let child_k_expr = LA.Const (pos, LA.Num (HString.mk_hstring (string_of_int child_k_val))) in
+            let eff_fts = List.map (function
+              | LA.UserType (p, a, n, None) when n = ty_name -> LA.UserType (p, a, n, Some child_k_expr)
+              | ft -> ft) field_tys in
+            R.ok (eff_fts, LA.UserType (pos, [], ty_name, Some k_expr))
           | _ -> type_error pos (BoundAnnotationOnNonBoundedCtor ctor))) in
-      if List.length args <> List.length field_tys then
-        type_error pos (ConstructorArityMismatch (ctor, List.length field_tys, List.length args))
+      if List.length args <> List.length effective_field_tys then
+        type_error pos (ConstructorArityMismatch (ctor, List.length effective_field_tys, List.length args))
       else
         let* pairs = R.seq (List.map2 (fun arg ft ->
           check_type_expr ctx nname arg ft
-        ) args field_tys) in
+        ) args effective_field_tys) in
         let checked_args, warnings = List.split pairs in
-        R.ok (LA.UserType (pos, [], ty_name, None), LA.ADTTerm (pos, ctor, k, checked_args), List.flatten warnings)
+        R.ok (result_ty, LA.ADTTerm (pos, ctor, k, checked_args), List.flatten warnings)
     )
 (** Infer the type of a [LA.expr] with the types of free variables given in [tc_context] *)
 
@@ -2893,18 +2902,18 @@ and check_type_well_formed: tc_context -> source -> NI.t option -> bool -> tc_ty
       then (
         (* Check that we are passing the correct number of type arguments *)
         let* _ = instantiate_type_variables ctx pos (NI.mk_node_id i) ty' ty_args in
-        let expanded = expand_type_syn ctx ty' in
-        match expanded with
-        | LA.ADT (_, _, Some _, _) when depth_annotation = None ->
+        let syn = lookup_ty_syn ctx i ty_args in
+        match syn with
+        | Some (LA.ADT (_, _, Some _, _)) when depth_annotation = None ->
           type_error pos (UnannotatedBoundedADTType i)
-        | LA.ADT (_, _, Some _, _) ->
+        | Some (LA.ADT (_, _, Some _, _)) ->
           let* _ = check_bounded_adt_depth ctx pos (Option.get depth_annotation) in
           R.ok (ty', [])
         | _ when Option.is_some depth_annotation ->
           type_error pos (BoundAnnotationOnNonBoundedType i)
-        | LA.ADT _ (* Already validated at declaration *)
-        | LA.UserType _ -> R.ok (ty', [])
-        | _ -> check_type_well_formed_rec is_nested expanded)
+        | Some (LA.ADT _) (* Already validated at declaration *)
+        | Some (LA.UserType _) | None -> R.ok (ty', [])
+        | Some expanded -> check_type_well_formed_rec is_nested expanded)
       else (
         match nname with 
         | None -> type_error pos (UndeclaredType i)
@@ -3010,11 +3019,18 @@ and eq_lustre_type : tc_context -> LA.lustre_type -> LA.lustre_type -> (bool, [>
   | Int _, IntRange _ -> R.ok true
 
   (* Lustre V6 features *)
-  | UserType (_, ty_args1, i1, _), UserType (_, ty_args2, i2, _) ->
-    if List.length ty_args1 = List.length ty_args2
+  | UserType (_, ty_args1, i1, d1), UserType (_, ty_args2, i2, d2) ->
+    if List.length ty_args1 = List.length ty_args2 && i1 = i2
     then (
       let* r1 = R.seqM (&&) true (List.map2 (eq_lustre_type ctx) ty_args1 ty_args2) in
-      let r2 = i1 = i2 in
+      let r2 = match d1, d2 with
+        | None, None -> true
+        | Some e1, Some e2 ->
+          (match IC.eval_int_expr ctx e1, IC.eval_int_expr ctx e2 with
+          | Ok v1, Ok v2 -> v1 = v2
+          | _ -> false)
+        | _ -> false
+      in
       R.ok (r1 && r2)
     )
     else R.ok false
@@ -3050,7 +3066,14 @@ and eq_lustre_type : tc_context -> LA.lustre_type -> LA.lustre_type -> (bool, [>
         (List.fold_left (&&) true (List.map2 (=) (LH.sort_idents is1) (LH.sort_idents is2))))
     else
       R.ok false
-  | ADT (_, n1, _, _), ADT (_, n2, _, _) -> R.ok (n1 = n2)
+  | ADT (_, n1, None, _), ADT (_, n2, None, _) -> R.ok (n1 = n2)
+  | ADT (_, n1, Some _, ctors1), ADT (_, n2, Some _, ctors2) ->
+    if n1 <> n2 || List.length ctors1 <> List.length ctors2 then R.ok false
+    else
+      R.seqM (&&) true (List.map2 (fun (c1, ftys1) (c2, ftys2) ->
+        if c1 <> c2 || List.length ftys1 <> List.length ftys2 then R.ok false
+        else R.seqM (&&) true (List.map2 (eq_lustre_type ctx) ftys1 ftys2)
+      ) ctors1 ctors2)
   (* node/function type *)
   | TArr (_, arg_ty1, ret_ty1), TArr (_, arg_ty2, ret_ty2) ->
     R.seqM (&&) true [ eq_lustre_type ctx arg_ty1 arg_ty2
@@ -3063,16 +3086,10 @@ and eq_lustre_type : tc_context -> LA.lustre_type -> LA.lustre_type -> (bool, [>
                     ; eq_lustre_type ctx val_ty1 val_ty2 ]
 
   (* special case for type synonyms *)
-  | UserType (pos, ty_args, u, _), ty
-  | ty, UserType (pos, ty_args, u, _) ->
+  | (UserType (_, _, u, _) as ut), other_ty
+  | other_ty, (UserType (_, _, u, _) as ut) ->
     if member_ty_syn ctx u then
-      let* ty_alias = (match (lookup_ty_syn ctx u ty_args) with
-        | None -> type_error pos
-          (Impossible ("Cannot find definition of Identifier "
-            ^ (HString.string_of_hstring u)))
-        | Some ty -> R.ok ty)
-      in
-      eq_lustre_type ctx ty ty_alias
+      eq_lustre_type ctx other_ty (expand_type_syn ctx ut)
     else R.ok false
   (* Another special case for GroupType equality *)
   | GroupType (_, tys), t

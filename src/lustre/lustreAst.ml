@@ -365,7 +365,7 @@ let rec pp_print_pattern ppf = function
   | Pat (_, c, depth, []) ->
     (match depth with
      | None -> HString.pp_print_hstring ppf c
-     | Some k -> Format.fprintf ppf "%a@[%a]" HString.pp_print_hstring c pp_print_expr k)
+     | Some k -> Format.fprintf ppf "%a@@[%a]" HString.pp_print_hstring c pp_print_expr k)
   | Pat (_, c, depth, pats) ->
     (match depth with
      | None ->
@@ -373,7 +373,7 @@ let rec pp_print_pattern ppf = function
          HString.pp_print_hstring c
          (pp_print_list pp_print_pattern ", ") pats
      | Some k ->
-       Format.fprintf ppf "%a@[%a](%a)"
+       Format.fprintf ppf "%a@@[%a](%a)"
          HString.pp_print_hstring c pp_print_expr k
          (pp_print_list pp_print_pattern ", ") pats)
 
@@ -680,7 +680,7 @@ and pp_print_expr ppf =
     | ADTTerm (_, c, depth, []) ->
       (match depth with
        | None -> HString.pp_print_hstring ppf c
-       | Some k -> Format.fprintf ppf "%a@[%a]" HString.pp_print_hstring c pp_print_expr k)
+       | Some k -> Format.fprintf ppf "%a@@[%a]" HString.pp_print_hstring c pp_print_expr k)
 
     | ADTTerm (_, c, depth, args) ->
       (match depth with
@@ -689,7 +689,7 @@ and pp_print_expr ppf =
            HString.pp_print_hstring c
            (pp_print_list pp_print_expr ",@ ") args
        | Some k ->
-         Format.fprintf ppf "%a@[%a](%a)"
+         Format.fprintf ppf "%a@@[%a](%a)"
            HString.pp_print_hstring c pp_print_expr k
            (pp_print_list pp_print_expr ",@ ") args)
 
@@ -735,12 +735,12 @@ and pp_print_lustre_type ppf = function
   | UserType (_, [], s, None) ->
     Format.fprintf ppf "%a" pp_print_ident s
   | UserType (_, [], s, Some k) ->
-    Format.fprintf ppf "%a@[%a]" pp_print_ident s pp_print_expr k
+    Format.fprintf ppf "%a@@[%a]" pp_print_ident s pp_print_expr k
   | UserType (_, tys, s, None) ->
     Format.fprintf ppf "%a<%a>" pp_print_ident s
       (pp_print_list pp_print_lustre_type "; ") tys
   | UserType (_, tys, s, Some k) ->
-    Format.fprintf ppf "%a<%a>@[%a]" pp_print_ident s
+    Format.fprintf ppf "%a<%a>@@[%a]" pp_print_ident s
       (pp_print_list pp_print_lustre_type "; ") tys pp_print_expr k
   | Map (_, ty1, ty2) -> 
     Format.fprintf ppf "map<%a; %a>" 

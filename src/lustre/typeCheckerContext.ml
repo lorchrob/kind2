@@ -179,9 +179,40 @@ let rec lookup_ty_syn: tc_context -> LA.ident -> tc_type list -> tc_type option
     the actual type. This chasing is necessary to check type equality 
     between user defined types. *)
 
-let rec expand_type_syn: tc_context -> tc_type -> tc_type
-  = fun ctx -> function
-  | UserType (_, ty_args, i, _) as ty -> (
+let rec expand_type_syn: ?expanded:HString.t list -> tc_context -> tc_type -> tc_type
+  = fun ?(expanded=[]) ctx -> function
+  | UserType (pos, ty_args, i, Some k_expr) as ty -> (
+    if List.mem i expanded then ty
+    else (
+      match IMap.find_opt i (ctx.ty_syns) with
+      | None -> ty
+      | Some inner -> (
+        match inner with
+        | LA.ADT (_, _, Some _, _) ->
+          let ty_vars =
+            match IMap.find_opt i (ctx.ty_ty_vars) with
+            | Some ps -> ps
+            | None -> []
+          in
+          let sigma = List.combine ty_vars ty_args in
+          let inner = LustreAstHelpers.apply_type_subst_in_type sigma inner in
+          let child_k_expr = LA.BinaryOp (pos, LA.Minus, k_expr,
+            LA.Const (pos, LA.Num (HString.mk_hstring "1"))) in
+          let inner = LustreAstHelpers.apply_bounded_depth_subst i child_k_expr inner in
+          expand_type_syn ~expanded:(i :: expanded) ctx inner
+        | _ ->
+          let ty_vars =
+            match IMap.find_opt i (ctx.ty_ty_vars) with
+            | Some ps -> ps
+            | None -> []
+          in
+          let sigma = List.combine ty_vars ty_args in
+          let inner = LustreAstHelpers.apply_type_subst_in_type sigma inner in
+          expand_type_syn ~expanded ctx inner
+      )
+    )
+  )
+  | UserType (_, ty_args, i, None) as ty -> (
     match IMap.find_opt i (ctx.ty_syns) with
     | None -> ty
     | Some inner -> (
@@ -195,35 +226,35 @@ let rec expand_type_syn: tc_context -> tc_type -> tc_type
         in
         let sigma = List.combine ty_vars ty_args in
         let inner = LustreAstHelpers.apply_type_subst_in_type sigma inner in
-        expand_type_syn ctx inner
+        expand_type_syn ~expanded ctx inner
       )
     )
   )
   | TupleType (p, tys) ->
-    let tys = List.map (expand_type_syn ctx) tys in
+    let tys = List.map (expand_type_syn ~expanded ctx) tys in
     TupleType (p, tys)
   | GroupType (p, tys) ->
-    let tys = List.map (expand_type_syn ctx) tys in
+    let tys = List.map (expand_type_syn ~expanded ctx) tys in
     GroupType (p, tys)
   | RecordType (p, name, tys) ->
-    let tys = List.map (fun (p, i, t) -> p, i, expand_type_syn ctx t) tys in
+    let tys = List.map (fun (p, i, t) -> p, i, expand_type_syn ~expanded ctx t) tys in
     RecordType (p, name, tys)
   | ArrayType (p, (ty, e)) ->
-    let ty = expand_type_syn ctx ty in
+    let ty = expand_type_syn ~expanded ctx ty in
     ArrayType (p, (ty, e))
-  | TArr (p, ty1, ty2) -> 
-    let ty1 = expand_type_syn ctx ty1 in 
-    let ty2 = expand_type_syn ctx ty2 in 
+  | TArr (p, ty1, ty2) ->
+    let ty1 = expand_type_syn ~expanded ctx ty1 in
+    let ty2 = expand_type_syn ~expanded ctx ty2 in
     TArr (p, ty1, ty2)
-  | Set (p, ty) -> 
-    let ty = expand_type_syn ctx ty in 
+  | Set (p, ty) ->
+    let ty = expand_type_syn ~expanded ctx ty in
     Set (p, ty)
-  | Map (p, ty1, ty2) -> 
-    let ty1 = expand_type_syn ctx ty1 in 
-    let ty2 = expand_type_syn ctx ty2 in 
+  | Map (p, ty1, ty2) ->
+    let ty1 = expand_type_syn ~expanded ctx ty1 in
+    let ty2 = expand_type_syn ~expanded ctx ty2 in
     Map (p, ty1, ty2)
-  | LA.RefinementType (p1, (p2, id, ty), e) -> 
-    let ty = expand_type_syn ctx ty in
+  | LA.RefinementType (p1, (p2, id, ty), e) ->
+    let ty = expand_type_syn ~expanded ctx ty in
     LA.RefinementType (p1, (p2, id, ty), e)
   | ty -> ty
 (** Chases the type (and nested types) to its base form to resolve type synonyms *)

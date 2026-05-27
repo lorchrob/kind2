@@ -69,6 +69,10 @@ val apply_type_subst_in_type : (HString.t * lustre_type) list -> lustre_type -> 
 (** [apply_type_subst_in_type s t] applies the (type-level) substitution defined by association list [s]
     to type [t]. *)
 
+val apply_bounded_depth_subst : HString.t -> expr -> lustre_type -> lustre_type
+(** [apply_bounded_depth_subst name child_k_expr t] replaces each unannotated [UserType(name, None)]
+    occurrence in [t] with [UserType(name, Some child_k_expr)], used when expanding bounded ADTs. *)
+
 val has_unguarded_pre : expr -> bool
 (** Returns true if the expression has unguareded pre's *)
 

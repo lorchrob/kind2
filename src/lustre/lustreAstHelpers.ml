@@ -478,6 +478,23 @@ and apply_type_subst_in_type: (index * lustre_type) list -> lustre_type -> lustr
     RefinementType (pos, (pos2, id, apply_type_subst_in_type sigma ty), apply_type_subst_in_expr sigma expr)
   | ty -> ty
 
+let apply_bounded_depth_subst (name: HString.t) (child_k_expr: expr) : lustre_type -> lustre_type =
+  let rec subst = function
+    | UserType (p, args, n, None) when n = name -> UserType (p, args, n, Some child_k_expr)
+    | UserType (p, args, n, d) -> UserType (p, List.map subst args, n, d)
+    | ArrayType (p, (ty, e)) -> ArrayType (p, (subst ty, e))
+    | TupleType (p, tys) -> TupleType (p, List.map subst tys)
+    | GroupType (p, tys) -> GroupType (p, List.map subst tys)
+    | RecordType (p, n, tis) -> RecordType (p, n, List.map (fun (p2, id, ty) -> p2, id, subst ty) tis)
+    | ADT (p, n, s, ctors) -> ADT (p, n, s, List.map (fun (cname, ftys) -> cname, List.map subst ftys) ctors)
+    | TArr (p, ty1, ty2) -> TArr (p, subst ty1, subst ty2)
+    | Set (p, ty) -> Set (p, subst ty)
+    | Map (p, ty1, ty2) -> Map (p, subst ty1, subst ty2)
+    | RefinementType (p, (p2, id, ty), e) -> RefinementType (p, (p2, id, subst ty), e)
+    | ty -> ty
+  in
+  subst
+
 let rec apply_subst_in_type sigma = function
   | ArrayType (pos, (ty, expr)) -> (
     let expr = apply_subst_in_expr sigma expr in 
