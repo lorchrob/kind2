@@ -127,6 +127,8 @@ type error_kind = Unknown of string
   | UnannotatedBoundedADTType of HString.t
   | UnannotatedBoundedADTCtor of HString.t
   | InvalidBoundedADTDepth of LustreAst.expr
+  | BoundAnnotationOnNonBoundedType of HString.t
+  | BoundAnnotationOnNonBoundedCtor of HString.t
 
 type error = [
   | `LustreTypeCheckerError of Lib.position * error_kind
@@ -277,6 +279,12 @@ let error_message kind = match kind with
     ^ "use '" ^ HString.string_of_hstring ctor ^ "@[k]' to instantiate it at a specific depth"
   | InvalidBoundedADTDepth e ->
     "Depth bound '" ^ LA.string_of_expr e ^ "' must evaluate to a concrete, nonnegative integer"
+  | BoundAnnotationOnNonBoundedType name ->
+    "Type '" ^ HString.string_of_hstring name ^ "' is not a bounded recursive ADT; "
+    ^ "'@[k]' depth annotation is not applicable"
+  | BoundAnnotationOnNonBoundedCtor ctor ->
+    "Constructor '" ^ HString.string_of_hstring ctor ^ "' does not belong to a bounded recursive ADT; "
+    ^ "'@[k]' depth annotation is not applicable"
 
 type warning_kind = 
   | UnusedBoundVariableWarning of HString.t
@@ -1521,6 +1529,8 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
               type_error pos (UnannotatedBoundedADTCtor id)
             | Some k_expr, Some (LA.ADT (_, _, Some _, _)) ->
               check_bounded_adt_depth ctx pos k_expr
+            | Some _, _ ->
+              type_error pos (BoundAnnotationOnNonBoundedCtor id)
             | _ -> R.ok ()) in
           (match adt_opt with
           | Some (LA.ADT (_, _, _, adt_cons)) ->
@@ -1539,6 +1549,8 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
             type_error pos (UnannotatedBoundedADTCtor ctor)
           | Some k_expr, Some (LA.ADT (_, _, Some _, _)) ->
             check_bounded_adt_depth ctx pos k_expr
+          | Some _, _ ->
+            type_error pos (BoundAnnotationOnNonBoundedCtor ctor)
           | _ -> R.ok ()) in
         (match adt_opt with
         | Some (LA.ADT (_, _, _, adt_cons)) ->
@@ -1590,7 +1602,7 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
         | Some k_expr ->
           (match lookup_ty_syn ctx ty_name [] with
           | Some (LA.ADT (_, _, Some _, _)) -> check_bounded_adt_depth ctx pos k_expr
-          | _ -> R.ok ())) in
+          | _ -> type_error pos (BoundAnnotationOnNonBoundedCtor ctor))) in
       if List.length args <> List.length field_tys then
         type_error pos (ConstructorArityMismatch (ctor, List.length field_tys, List.length args))
       else
@@ -2888,6 +2900,8 @@ and check_type_well_formed: tc_context -> source -> NI.t option -> bool -> tc_ty
         | LA.ADT (_, _, Some _, _) ->
           let* _ = check_bounded_adt_depth ctx pos (Option.get depth_annotation) in
           R.ok (ty', [])
+        | _ when Option.is_some depth_annotation ->
+          type_error pos (BoundAnnotationOnNonBoundedType i)
         | LA.ADT _ (* Already validated at declaration *)
         | LA.UserType _ -> R.ok (ty', [])
         | _ -> check_type_well_formed_rec is_nested expanded)
