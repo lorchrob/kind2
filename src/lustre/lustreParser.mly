@@ -66,6 +66,7 @@ let mk_span start_pos end_pos =
 (* Tokens for types *)
 %token TYPE
 %token DATATYPE
+%token BOUNDED
 %token INT
 %token UINT
 %token SINT
@@ -377,10 +378,10 @@ type_decl:
                         A.ADT (mk_pos $startpos, e, None, cs))) l }
 
   (* Definition of a bounded recursive algebraic datatype: datatype Name[k] = ... *)
-  | DATATYPE; n = ident; LSQBRACKET; k = NUMERAL; RSQBRACKET; EQUALS; option(BAR); cs = separated_nonempty_list(BAR, adt_constructor); SEMICOLON
+  | BOUNDED; DATATYPE; n = ident; EQUALS; option(BAR); cs = separated_nonempty_list(BAR, adt_constructor); SEMICOLON
      { [A.AliasType (mk_pos $startpos, n, [],
                      A.ADT (mk_pos $startpos, n,
-                            Some (int_of_string (HString.string_of_hstring k)), cs))] }
+                            Some (-1), cs))] }
 
   (* A record type, can only be defined as alias *)
   | TYPE; l = ident_list; EQUALS; t = record_type; SEMICOLON
@@ -441,9 +442,8 @@ lustre_type:
   | s = ident; ps = type_static_params { A.UserType (mk_pos $startpos, ps, s, None) }
 
   (* Depth-annotated user-defined type: Name@[k] *)
-  | s = ident; ATSIGN; LSQBRACKET; k = NUMERAL; RSQBRACKET
-    { A.UserType (mk_pos $startpos, [], s,
-                  Some (int_of_string (HString.string_of_hstring k))) }
+  | s = ident; ATSIGN; LSQBRACKET; k = expr; RSQBRACKET
+    { A.UserType (mk_pos $startpos, [], s, Some k) }
 
   (* Tuple type *)
   | t = tuple_type { A.TupleType (mk_pos $startpos, t) } 
@@ -508,13 +508,11 @@ pat:
     { A.Pat (mk_pos $startpos, i, None, []) }
   | c = ident; LPAREN; ps = separated_nonempty_list(COMMA, pat); RPAREN
     { A.Pat (mk_pos $startpos, c, None, ps) }
-  | c = ident; ATSIGN; LSQBRACKET; k = NUMERAL; RSQBRACKET
-    { A.Pat (mk_pos $startpos, c,
-             Some (int_of_string (HString.string_of_hstring k)), []) }
-  | c = ident; ATSIGN; LSQBRACKET; k = NUMERAL; RSQBRACKET;
+  | c = ident; ATSIGN; LSQBRACKET; k = expr; RSQBRACKET
+    { A.Pat (mk_pos $startpos, c, Some k, []) }
+  | c = ident; ATSIGN; LSQBRACKET; k = expr; RSQBRACKET;
     LPAREN; ps = separated_nonempty_list(COMMA, pat); RPAREN
-    { A.Pat (mk_pos $startpos, c,
-             Some (int_of_string (HString.string_of_hstring k)), ps) }
+    { A.Pat (mk_pos $startpos, c, Some k, ps) }
 
 (* A single arm of a match expression *)
 match_arm:
@@ -1292,15 +1290,13 @@ pexpr(Q):
   | e1 = pexpr(Q); ARROW; e2 = pexpr(Q) { A.Arrow (mk_pos $startpos, e1, e2) }
 
   (* Depth-annotated ADT constructor: Ctor@[k](args) *)
-  | s = ident; ATSIGN; LSQBRACKET; k = NUMERAL; RSQBRACKET;
+  | s = ident; ATSIGN; LSQBRACKET; k = expr; RSQBRACKET;
     LPAREN; a = separated_list(COMMA, expr); RPAREN
-    { A.ADTTerm (mk_pos $startpos, s,
-                 Some (int_of_string (HString.string_of_hstring k)), a) }
+    { A.ADTTerm (mk_pos $startpos, s, Some k, a) }
 
   (* Depth-annotated nullary ADT constructor: Ctor@[k] *)
-  | s = ident; ATSIGN; LSQBRACKET; k = NUMERAL; RSQBRACKET
-    { A.ADTTerm (mk_pos $startpos, s,
-                 Some (int_of_string (HString.string_of_hstring k)), []) }
+  | s = ident; ATSIGN; LSQBRACKET; k = expr; RSQBRACKET
+    { A.ADTTerm (mk_pos $startpos, s, Some k, []) }
 
   (* A node or function call *)
   | e = node_call { e }

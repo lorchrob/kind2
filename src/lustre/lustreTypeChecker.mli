@@ -111,6 +111,7 @@ type error_kind = Unknown of string
   | ConstructorNameClashWithConst of HString.t * HString.t
   | UnannotatedBoundedADTType of HString.t
   | UnannotatedBoundedADTCtor of HString.t
+  | InvalidBoundedADTDepth of LustreAst.expr
 
 type error = [
   | `LustreTypeCheckerError of Lib.position * error_kind

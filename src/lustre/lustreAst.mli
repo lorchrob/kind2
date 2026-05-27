@@ -110,9 +110,6 @@ type group_expr =
 
 type access_kind = Array | Map | Tuple | Unknown
 
-(** Pattern for match expressions *)
-type pattern = Pat of position * ident * int option * pattern list
-
 (** A Lustre type *)
 type lustre_type =
   | Bool of position
@@ -121,7 +118,7 @@ type lustre_type =
   | UBitVector of position * int
   | IntRange of position * expr option * expr option
   | Real of position
-  | UserType of position * lustre_type list * ident * int option
+  | UserType of position * lustre_type list * ident * expr option
   | AbstractType of position * ident
   | TupleType of position * lustre_type list
   | GroupType of position * lustre_type list
@@ -180,7 +177,7 @@ and expr =
   (* Type ascription *)
   | TypeAscription of position * expr * lustre_type
   (* ADT constructor application *)
-  | ADTTerm of position * ident * int option * expr list
+  | ADTTerm of position * ident * expr option * expr list
   (* Pattern matching on ADT values *)
   | Match of position * expr * (pattern * expr) list * lustre_type option
 
@@ -194,7 +191,10 @@ and label_or_index =
   | MapIndex of position * expr (* expr not restricted to integers *)
   | SetIndex of position * expr
   (* Constructor used at parse time before the index type is known *)
-  | GenericIndex of position * expr 
+  | GenericIndex of position * expr
+
+(** Pattern for match expressions *)
+and pattern = Pat of position * ident * expr option * pattern list
 
 (** {1 Declarations} *)
 

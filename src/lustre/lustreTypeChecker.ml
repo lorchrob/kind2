@@ -126,6 +126,7 @@ type error_kind = Unknown of string
   | ConstructorNameClashWithConst of HString.t * HString.t
   | UnannotatedBoundedADTType of HString.t
   | UnannotatedBoundedADTCtor of HString.t
+  | InvalidBoundedADTDepth of LustreAst.expr
 
 type error = [
   | `LustreTypeCheckerError of Lib.position * error_kind
@@ -274,6 +275,8 @@ let error_message kind = match kind with
   | UnannotatedBoundedADTCtor ctor ->
     "Constructor '" ^ HString.string_of_hstring ctor ^ "' belongs to a bounded recursive ADT; "
     ^ "use '" ^ HString.string_of_hstring ctor ^ "@[k]' to instantiate it at a specific depth"
+  | InvalidBoundedADTDepth e ->
+    "Depth bound '" ^ LA.string_of_expr e ^ "' must evaluate to a concrete, nonnegative integer"
 
 type warning_kind = 
   | UnusedBoundVariableWarning of HString.t
@@ -297,6 +300,10 @@ let (>>) = R.(>>)
 let type_error pos kind = Error (`LustreTypeCheckerError (pos, kind))
 (** [type_error] returns an [Error] of [tc_result] *)
 
+let check_bounded_adt_depth ctx pos k_expr =
+  match IC.eval_int_expr ctx k_expr with
+  | Ok i when i >= 0 -> R.ok ()
+  | _ -> type_error pos (InvalidBoundedADTDepth k_expr)
 
 (********************************
  * Functions to update context  *
@@ -1509,9 +1516,11 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
       | LA.Pat (pos, id, depth, []) ->
         let is_constructor = Option.is_some (lookup_constructor ctx id) in
         if is_constructor then (
-          let* _ = (match adt_opt with
-            | Some (LA.ADT (_, _, Some _, _)) when depth = None ->
+          let* _ = (match depth, adt_opt with
+            | None, Some (LA.ADT (_, _, Some _, _)) ->
               type_error pos (UnannotatedBoundedADTCtor id)
+            | Some k_expr, Some (LA.ADT (_, _, Some _, _)) ->
+              check_bounded_adt_depth ctx pos k_expr
             | _ -> R.ok ()) in
           (match adt_opt with
           | Some (LA.ADT (_, _, _, adt_cons)) ->
@@ -1525,9 +1534,13 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
         ) else
           R.ok (add_ty ctx id field_ty)
       | LA.Pat (pos, ctor, depth, sub_pats) ->
+        let* _ = (match depth, adt_opt with
+          | None, Some (LA.ADT (_, _, Some _, _)) ->
+            type_error pos (UnannotatedBoundedADTCtor ctor)
+          | Some k_expr, Some (LA.ADT (_, _, Some _, _)) ->
+            check_bounded_adt_depth ctx pos k_expr
+          | _ -> R.ok ()) in
         (match adt_opt with
-        | Some (LA.ADT (_, _, Some _, _)) when depth = None ->
-          type_error pos (UnannotatedBoundedADTCtor ctor)
         | Some (LA.ADT (_, _, _, adt_cons)) ->
           (match List.assoc_opt ctor adt_cons with
           | None -> type_error pos (UnboundConstructor ctor)
@@ -1569,11 +1582,15 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
     (match lookup_constructor ctx ctor with
     | None -> type_error pos (UnboundConstructor ctor)
     | Some (ty_name, field_tys) ->
-      let* _ = (if k = None then
-        match lookup_ty_syn ctx ty_name [] with
-        | Some (LA.ADT (_, _, Some _, _)) -> type_error pos (UnannotatedBoundedADTCtor ctor)
-        | _ -> R.ok ()
-      else R.ok ()) in
+      let* _ = (match k with
+        | None ->
+          (match lookup_ty_syn ctx ty_name [] with
+          | Some (LA.ADT (_, _, Some _, _)) -> type_error pos (UnannotatedBoundedADTCtor ctor)
+          | _ -> R.ok ())
+        | Some k_expr ->
+          (match lookup_ty_syn ctx ty_name [] with
+          | Some (LA.ADT (_, _, Some _, _)) -> check_bounded_adt_depth ctx pos k_expr
+          | _ -> R.ok ())) in
       if List.length args <> List.length field_tys then
         type_error pos (ConstructorArityMismatch (ctor, List.length field_tys, List.length args))
       else
@@ -2868,6 +2885,9 @@ and check_type_well_formed: tc_context -> source -> NI.t option -> bool -> tc_ty
         match expanded with
         | LA.ADT (_, _, Some _, _) when depth_annotation = None ->
           type_error pos (UnannotatedBoundedADTType i)
+        | LA.ADT (_, _, Some _, _) ->
+          let* _ = check_bounded_adt_depth ctx pos (Option.get depth_annotation) in
+          R.ok (ty', [])
         | LA.ADT _ (* Already validated at declaration *)
         | LA.UserType _ -> R.ok (ty', [])
         | _ -> check_type_well_formed_rec is_nested expanded)
