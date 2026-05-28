@@ -2596,16 +2596,36 @@ and normalize_expr ?guard info (node_id : NI.t option) map =
     ) arms |> Lib.split3 in
     let gids2 = List.fold_left union (empty ()) gids2 in
     LDAT.build_ite pos desugared_arms, union gids1 gids2, warnings1 @ List.flatten warnings2 
-  | A.ADTTerm (pos, ctor, _k, args) ->
+  | A.ADTTerm (pos, ctor, k, args) ->
     let args', gids1, warnings = normalize_list (normalize_expr ?guard info node_id map) args in
     let find_adt_info_for_ctor =
-      LDAT.HStringMap.fold (fun _ty_name info acc ->
-        match acc with
-        | Some _ -> acc
+      match k with
+      | Some (A.Const (_, A.Num k_str)) ->
+        (* Bounded ADT with concrete depth: find base_name then look up depth-specific entry *)
+        let base_opt = LDAT.HStringMap.fold (fun _ty_name i acc ->
+          match acc with
+          | Some _ -> acc
+          | None ->
+            if i.LDAT.base_name <> i.LDAT.type_name
+               && LDAT.HStringMap.mem ctor i.LDAT.ctor_fields
+            then Some i.LDAT.base_name
+            else None
+        ) info.adt_map None in
+        (match base_opt with
+        | Some base_name ->
+          let k_val = int_of_string (HString.string_of_hstring k_str) in
+          let depth_name = LDAT.bounded_type_name base_name k_val in
+          LDAT.HStringMap.find_opt depth_name info.adt_map
         | None ->
-          if LDAT.HStringMap.mem ctor info.LDAT.ctor_fields then Some info
-          else None
-      ) info.adt_map None
+          LDAT.HStringMap.fold (fun _ty_name i acc ->
+            match acc with Some _ -> acc | None ->
+              if LDAT.HStringMap.mem ctor i.LDAT.ctor_fields then Some i else None
+          ) info.adt_map None)
+      | _ ->
+        LDAT.HStringMap.fold (fun _ty_name i acc ->
+          match acc with Some _ -> acc | None ->
+            if LDAT.HStringMap.mem ctor i.LDAT.ctor_fields then Some i else None
+        ) info.adt_map None
     in
     (match find_adt_info_for_ctor with
     | None -> assert false

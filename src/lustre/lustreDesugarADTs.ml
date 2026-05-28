@@ -15,22 +15,30 @@
    permissions and limitations under the License.
 *)
 
-(* Desugaring of non-recursive algebraic data types (ADTs) to records.
+(* Desugaring of algebraic data types (ADTs) to records.
 
-    For each ADT declaration
+    For each non-recursive ADT declaration
       type T = C0 | C1(t1_0, t1_1) | C2(t2_0)
     we produce a discriminant enum type and an equivalent record type:
-      type _adt_T_tag = _adt_T_tag_C0 | _adt_T_tag_C1 | _adt_T_tag_C2;
-      type T = { _adt_T_tag: _adt_T_tag;
-                 _adt_T_C1_0: t1_0; _adt_T_C1_1: t1_1;
-                 _adt_T_C2_0: t2_0 }
-    where the enum tag field encodes the active constructor and the
-    payload fields for non-selected constructors carry junk values.
+      type T_tag = T_tag_C0 | T_tag_C1 | T_tag_C2;
+      type T = { T_tag: T_tag;
+                 C1_0: t1_0; C1_1: t1_1;
+                 C2_0: t2_0 }
 
-    ADTTerm expressions and Match expressions are desugared during
-    normalization: ADTTerm becomes a RecordExpr, and Match becomes
-    a nested ITE chain on the tag field.
+    For each bounded recursive ADT declaration
+      bounded datatype Message = | Atomic(int) | Enc(Message, Message)
+    used at depths 0..k (determined by scanning the program), we produce
+    one enum+record pair per depth:
+      type Message.0_tag = { Atomic };        (* only non-recursive ctors *)
+      type Message.0 = { Message.0_tag: Message.0_tag; Atomic_0: int }
+      type Message.1_tag = { Atomic, Enc };
+      type Message.1 = { Message.1_tag: Message.1_tag;
+                         Atomic_0: int; Enc_0: Message.0; Enc_1: Message.0 }
+      ...
+    The dot notation (Message.2) is valid in SMT-LIB but not in Lustre
+    identifiers, so it cannot clash with user-defined names.
 
+    ADTTerm and Match expressions are desugared during normalization.
     This module handles the pre-pass (TypeDecl transformation and context
     update) and exports shared infrastructure used by the normalizer. *)
 
@@ -38,6 +46,7 @@ module LA = LustreAst
 module LH = LustreAstHelpers
 module Ctx = TypeCheckerContext
 module GI = GeneratedIdentifiers
+module IC = LustreAstInlineConstants
 module HStringMap = HString.HStringMap
 
 (** Counter for generating unique oracle variable names. *)
@@ -45,6 +54,9 @@ let oracle_counter = ref 0
 
 type adt_info = {
   type_name : HString.t;
+
+  (* Original (non-depth-augmented) ADT name; equals type_name for non-bounded *)
+  base_name : HString.t;
 
   (* name of the tag field in the record *)
   disc_field : HString.t;
@@ -71,7 +83,13 @@ let disc_field_name type_name =
 let payload_field_name ctor i =
   HString.mk_hstring (HString.string_of_hstring ctor ^ "_" ^ string_of_int i)
 
-let build_adt_info type_name ctors =
+let bounded_type_name base_name depth =
+  HString.mk_hstring (HString.string_of_hstring base_name ^ "." ^ string_of_int depth)
+
+(* Build adt_info for an ADT (possibly depth-specific for bounded ADTs).
+   base_name is the original non-augmented name; type_name is the (possibly
+   depth-augmented) name used as the record type name. *)
+let build_adt_info_named ~base_name ~type_name ctors =
   let disc_field = disc_field_name type_name in
   let disc_enum = disc_field_name type_name in
   let ctor_variants = List.map fst ctors in
@@ -86,16 +104,197 @@ let build_adt_info type_name ctors =
   let all_payload_fields =
     List.concat_map (fun (ctor, _) -> HStringMap.find ctor ctor_fields) ctors
   in
-  { type_name; disc_field; disc_enum; ctor_variants; ctor_fields; all_payload_fields }
+  { type_name; base_name; disc_field; disc_enum;
+    ctor_variants; ctor_fields; all_payload_fields }
 
-(* Collect all ADT type declarations from a program into an adt_map. *)
-let build_adt_map decls =
-  List.fold_left (fun m decl ->
+(* Build adt_info for a non-bounded ADT *)
+let build_adt_info type_name ctors =
+  build_adt_info_named ~base_name:type_name ~type_name ctors
+
+(* Build adt_info for one depth level of a bounded ADT.
+   At depth 0: only non-recursive constructors.
+   At depth d > 0: all constructors, with recursive UserType(base_name, _)
+   fields replaced by UserType(base_name.(d-1), None). *)
+let build_bounded_adt_info_at_depth base_name ctors depth =
+  let is_recursive_field base ty =
+    match ty with
+    | LA.UserType (_, _, n, _) -> n = base
+    | _ -> false
+  in
+  let has_recursive_field base field_tys =
+    List.exists (is_recursive_field base) field_tys
+  in
+  let child_name = bounded_type_name base_name (depth - 1) in
+  let adjust_field base ty =
+    match ty with
+    | LA.UserType (p, args, n, _) when n = base ->
+      LA.UserType (p, args, child_name, None)
+    | _ -> ty
+  in
+  (* Filter and adjust constructors for this depth *)
+  let filtered_ctors =
+    if depth = 0 then
+      List.filter (fun (_, ftys) -> not (has_recursive_field base_name ftys)) ctors
+    else
+      List.map (fun (ctor, ftys) ->
+        ctor, List.map (adjust_field base_name) ftys
+      ) ctors
+  in
+  let type_name = bounded_type_name base_name depth in
+  build_adt_info_named ~base_name ~type_name filtered_ctors
+
+(* Collect all ADT type declarations from a program into an adt_map.
+   For bounded ADTs, scans the program for the maximum depth used per name
+   and generates one adt_info per depth level (0..max_depth). *)
+let build_adt_map ctx decls =
+  (* First pass: collect bounded ADT names+ctors and non-bounded ADTs *)
+  let bounded_adts : (HString.t * (HString.t * LA.lustre_type list) list) list ref = ref [] in
+  let non_bounded_adts : (HString.t * (HString.t * LA.lustre_type list) list) list ref = ref [] in
+  List.iter (function
+    | LA.TypeDecl (_, LA.AliasType (_, name, _, LA.ADT (_, _, Some _, ctors))) ->
+      bounded_adts := (name, ctors) :: !bounded_adts
+    | LA.TypeDecl (_, LA.AliasType (_, name, _, LA.ADT (_, _, None, ctors))) ->
+      non_bounded_adts := (name, ctors) :: !non_bounded_adts
+    | _ -> ()
+  ) decls;
+  (* Build a map from ctor name -> base bounded ADT name for depth scanning *)
+  let ctor_to_base : HString.t HStringMap.t =
+    List.fold_left (fun m (name, ctors) ->
+      List.fold_left (fun m (ctor, _) -> HStringMap.add ctor name m) m ctors
+    ) HStringMap.empty !bounded_adts
+  in
+  let bounded_names : unit HStringMap.t =
+    List.fold_left (fun m (name, _) -> HStringMap.add name () m)
+      HStringMap.empty !bounded_adts
+  in
+  (* Scan depth from a Const integer expression *)
+  let depth_of_const = function
+    | LA.Const (_, LA.Num k_str) -> Some (int_of_string (HString.string_of_hstring k_str))
+    | _ -> None
+  in
+  (* Second pass: find max depth used per bounded ADT *)
+  let max_depths : int HStringMap.t ref = ref HStringMap.empty in
+  let update_depth name d =
+    let cur = try HStringMap.find name !max_depths with Not_found -> -1 in
+    if d > cur then max_depths := HStringMap.add name d !max_depths
+  in
+  let rec scan_ty ty =
+    match ty with
+    | LA.UserType (_, _, name, Some k_expr) when HStringMap.mem name bounded_names ->
+      let k_expr_eval =
+        match depth_of_const k_expr with
+        | Some k -> Some k
+        | None ->
+          match IC.eval_int_expr ctx k_expr with
+          | Ok k -> Some k | Error _ -> None
+      in
+      (match k_expr_eval with
+      | Some k -> update_depth name k
+      | None -> ())
+    | LA.UserType (_, args, _, _) -> List.iter scan_ty args
+    | LA.ArrayType (_, (ty, _)) -> scan_ty ty
+    | LA.TupleType (_, tys) | LA.GroupType (_, tys) -> List.iter scan_ty tys
+    | LA.RecordType (_, _, fields) -> List.iter (fun (_, _, ty) -> scan_ty ty) fields
+    | LA.ADT (_, _, _, ctors) ->
+      List.iter (fun (_, ftys) -> List.iter scan_ty ftys) ctors
+    | LA.TArr (_, t1, t2) | LA.Map (_, t1, t2) -> scan_ty t1; scan_ty t2
+    | LA.Set (_, ty) -> scan_ty ty
+    | LA.RefinementType (_, (_, _, ty), _) -> scan_ty ty
+    | _ -> ()
+  in
+  let rec scan_expr expr =
+    match expr with
+    | LA.ADTTerm (_, ctor, Some k_expr, args) ->
+      (match HStringMap.find_opt ctor ctor_to_base with
+      | Some base ->
+        (match depth_of_const k_expr with
+        | Some k -> update_depth base k
+        | None ->
+          match IC.eval_int_expr ctx k_expr with
+          | Ok k -> update_depth base k | Error _ -> ())
+      | None -> ());
+      List.iter scan_expr args
+    | LA.ADTTerm (_, _, _, args) -> List.iter scan_expr args
+    | LA.Match (_, scrut, arms, ty_opt) ->
+      scan_expr scrut;
+      List.iter (fun (_, body) -> scan_expr body) arms;
+      (match ty_opt with Some ty -> scan_ty ty | None -> ())
+    | LA.BinaryOp (_, _, e1, e2) | LA.CompOp (_, _, e1, e2)
+    | LA.Arrow (_, e1, e2) | LA.ArrayConstr (_, e1, e2)
+    | LA.IndexAccess (_, e1, e2, _) ->
+      scan_expr e1; scan_expr e2
+    | LA.UnaryOp (_, _, e) | LA.ConvOp (_, _, e)
+    | LA.When (_, e, _) | LA.Pre (_, e)
+    | LA.RecordProject (_, e, _) -> scan_expr e
+    | LA.TernaryOp (_, _, e1, e2, e3) -> scan_expr e1; scan_expr e2; scan_expr e3
+    | LA.GroupExpr (_, _, es) | LA.Call (_, _, _, es) -> List.iter scan_expr es
+    | LA.RecordExpr (_, _, _, fields) -> List.iter (fun (_, e) -> scan_expr e) fields
+    | LA.TypeAscription (_, e, ty) -> scan_expr e; scan_ty ty
+    | LA.Quantifier (_, _, tis, e) ->
+      List.iter (fun (_, _, ty) -> scan_ty ty) tis; scan_expr e
+    | LA.Condact (_, e1, e2, _, es1, es2) ->
+      scan_expr e1; scan_expr e2; List.iter scan_expr es1; List.iter scan_expr es2
+    | LA.Activate (_, _, e1, e2, es) ->
+      scan_expr e1; scan_expr e2; List.iter scan_expr es
+    | LA.Merge (_, _, cases) -> List.iter (fun (_, e) -> scan_expr e) cases
+    | LA.RestartEvery (_, _, es, e) -> List.iter scan_expr es; scan_expr e
+    | LA.StructUpdate (_, e, _, Some e2) -> scan_expr e; scan_expr e2
+    | LA.StructUpdate (_, e, _, None) -> scan_expr e
+    | _ -> ()
+  in
+  let scan_node_item item =
+    let open LA in
+    match item with
+    | Body (Equation (_, _, e)) -> scan_expr e
+    | Body (Assert (_, e)) -> scan_expr e
+    | AnnotMain _ | AnnotProperty _ -> ()
+    | IfBlock _ | FrameBlock _ -> ()
+  in
+  let scan_decl decl =
+    let open LA in
     match decl with
-    | LA.TypeDecl (_, LA.AliasType (_, name, _, LA.ADT (_, _, _, ctors))) ->
-      HStringMap.add name (build_adt_info name ctors) m
-    | _ -> m
-  ) HStringMap.empty decls
+    | NodeDecl (_, (_, _, _, _, inputs, outputs, ldecls, items, _)) ->
+      List.iter (fun (_, _, ty, _, _) -> scan_ty ty) inputs;
+      List.iter (fun (_, _, ty, _) -> scan_ty ty) outputs;
+      List.iter (function
+        | NodeVarDecl (_, (_, _, ty, _)) -> scan_ty ty
+        | NodeConstDecl (_, TypedConst (_, _, _, ty)) -> scan_ty ty
+        | NodeConstDecl (_, FreeConst (_, _, ty)) -> scan_ty ty
+        | NodeConstDecl (_, UntypedConst _) -> ()
+      ) ldecls;
+      List.iter scan_node_item items
+    | FuncDecl (_, (_, _, _, _, inputs, outputs, ldecls, items, _)) ->
+      List.iter (fun (_, _, ty, _, _) -> scan_ty ty) inputs;
+      List.iter (fun (_, _, ty, _) -> scan_ty ty) outputs;
+      List.iter (function
+        | NodeVarDecl (_, (_, _, ty, _)) -> scan_ty ty
+        | NodeConstDecl (_, TypedConst (_, _, _, ty)) -> scan_ty ty
+        | NodeConstDecl (_, FreeConst (_, _, ty)) -> scan_ty ty
+        | NodeConstDecl (_, UntypedConst _) -> ()
+      ) ldecls;
+      List.iter scan_node_item items
+    | ConstDecl (_, TypedConst (_, _, e, ty)) -> scan_expr e; scan_ty ty
+    | ConstDecl (_, UntypedConst (_, _, e)) -> scan_expr e
+    | ConstDecl (_, FreeConst (_, _, ty)) -> scan_ty ty
+    | TypeDecl _ | ContractNodeDecl _ | NodeParamInst _ -> ()
+  in
+  List.iter scan_decl decls;
+  (* Build the adt_map *)
+  let m = ref HStringMap.empty in
+  (* Non-bounded ADTs *)
+  List.iter (fun (name, ctors) ->
+    m := HStringMap.add name (build_adt_info name ctors) !m
+  ) !non_bounded_adts;
+  (* Bounded ADTs: generate one entry per depth 0..max_depth *)
+  List.iter (fun (base_name, ctors) ->
+    let max_d = try HStringMap.find base_name !max_depths with Not_found -> -1 in
+    for d = 0 to max_d do
+      let type_name = bounded_type_name base_name d in
+      let info = build_bounded_adt_info_at_depth base_name ctors d in
+      m := HStringMap.add type_name info !m
+    done
+  ) !bounded_adts;
+  !m
 
 let record_type_of_adt pos info =
   let disc_fld = (pos, info.disc_field, LA.UserType (pos, [], info.disc_enum, None)) in
@@ -118,6 +317,11 @@ let tag_of pos info scrut =
 
 let adt_info_of_type adt_map ty =
   match ty with
+  | LA.UserType (_, _, name, Some (LA.Const (_, LA.Num k_str))) ->
+    (* Bounded ADT with concrete depth: look up by depth-augmented name *)
+    let augmented = HString.mk_hstring
+      (HString.string_of_hstring name ^ "." ^ HString.string_of_hstring k_str) in
+    HStringMap.find_opt augmented adt_map
   | LA.UserType (_, _, name, _) -> HStringMap.find_opt name adt_map
   | LA.ADT (_, name, _, _) -> HStringMap.find_opt name adt_map
   | _ -> None
@@ -196,9 +400,9 @@ let rec build_ite pos arms =
   match arms with
   | [] -> assert false
   (* More cases after a catch-all; will be caught in later PR by redundancy checks *)
-  | (None, _) :: _ :: _ -> assert false 
-  (* Last case must always cover all cases so far uncovered (problems here will be caught by later PR's exhaustiveness checks) *)
-  | [(_, body)] -> body 
+  | (None, _) :: _ :: _ -> assert false
+  (* Last case must always cover all cases so far uncovered *)
+  | [(_, body)] -> body
   | (Some cond, body) :: rest ->
     LA.TernaryOp (pos, LA.LazyIte, cond, body, build_ite pos rest)
 
@@ -227,13 +431,14 @@ let update_context adt_map ctx =
    the type-checker context. Expression-level desugaring (ADTTerm, Match)
    is interspersed within the normalizer. *)
 let desugar_adts_program ctx decls =
-  let adt_map = build_adt_map decls in
+  let adt_map = build_adt_map ctx decls in
   if HStringMap.is_empty adt_map then
     (decls, ctx, adt_map)
   else
     let decls = List.concat_map (fun decl ->
       match decl with
-      | LA.TypeDecl (sp, LA.AliasType (_, name, ty_params, LA.ADT (pos, _, _, _))) ->
+      | LA.TypeDecl (sp, LA.AliasType (_, name, ty_params, LA.ADT (pos, _, None, _))) ->
+        (* Non-bounded ADT: single enum + record pair *)
         (match HStringMap.find_opt name adt_map with
         | Some info ->
           let enum_ty = LA.EnumType (pos, info.disc_enum, info.ctor_variants) in
@@ -242,6 +447,29 @@ let desugar_adts_program ctx decls =
           let record_decl = LA.TypeDecl (sp, LA.AliasType (pos, name, ty_params, record_ty)) in
           [enum_decl; record_decl]
         | None -> assert false)
+      | LA.TypeDecl (sp, LA.AliasType (_, name, ty_params, LA.ADT (pos, _, Some _, _))) ->
+        (* Bounded ADT: emit one enum + record pair per depth 0..max *)
+        let depth_entries =
+          HStringMap.bindings adt_map
+          |> List.filter (fun (k, info) ->
+            k <> name && info.base_name = name)
+          |> List.sort (fun (_, i1) (_, i2) ->
+            (* Sort by depth: parse the suffix after the last '.' *)
+            let depth_of type_name =
+              let s = HString.string_of_hstring type_name in
+              match String.rindex_opt s '.' with
+              | Some idx -> int_of_string (String.sub s (idx+1) (String.length s - idx - 1))
+              | None -> -1
+            in
+            compare (depth_of i1.type_name) (depth_of i2.type_name))
+        in
+        List.concat_map (fun (_, info) ->
+          let enum_ty = LA.EnumType (pos, info.disc_enum, info.ctor_variants) in
+          let enum_decl = LA.TypeDecl (sp, LA.AliasType (pos, info.disc_enum, [], enum_ty)) in
+          let record_ty = record_type_of_adt pos info in
+          let record_decl = LA.TypeDecl (sp, LA.AliasType (pos, info.type_name, ty_params, record_ty)) in
+          [enum_decl; record_decl]
+        ) depth_entries
       | _ -> [decl]
     ) decls in
     let ctx = update_context adt_map ctx in

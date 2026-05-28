@@ -783,8 +783,15 @@ and compile_ast_type
       let enum_elements = List.map HString.string_of_hstring enum_elements in
       let ty = Type.mk_enum enum_name enum_elements in
       X.singleton X.empty_index ty
-  | A.UserType (_, _, ident, _) ->
-    StringMap.find ident cstate.type_alias 
+  | A.UserType (_, _, ident, depth_opt) ->
+    let lookup_name = match depth_opt with
+      | Some (A.Const (_, A.Num k_str)) ->
+        let augmented = HString.mk_hstring
+          (HString.string_of_hstring ident ^ "." ^ HString.string_of_hstring k_str) in
+        if StringMap.mem augmented cstate.type_alias then augmented else ident
+      | _ -> ident
+    in
+    StringMap.find lookup_name cstate.type_alias
   | A.AbstractType (_, ident) ->
     let ident = HString.string_of_hstring ident in
     X.singleton X.empty_index (Type.mk_abstr ident)
@@ -1035,7 +1042,9 @@ and compile_ast_expr
     let find_adt_disc idx =
       match List.rev idx with
       | X.AdtPayloadIndex (ctor, _) :: prefix_rev ->
-        (* This is an ADT payload field; any failure to locate the discriminant is a bug *)
+        (* This is an ADT payload field; any failure to locate the discriminant is a bug.
+           For bounded ADTs, multiple depths share the same constructor; we pick the depth
+           whose tag index actually appears in the compiled expression trie (eqs). *)
         let prefix = List.rev prefix_rev in
         let result = StringMap.fold (fun type_name (info : LDAT.adt_info) acc ->
           match acc with
@@ -1043,8 +1052,10 @@ and compile_ast_expr
           | None ->
             if StringMap.mem (HString.mk_hstring ctor) info.ctor_fields then
               let disc_idx = prefix @ [X.AdtTagIndex (HString.string_of_hstring type_name)] in
-              let (disc_e1, _) = X.find disc_idx eqs in
-              Some (disc_e1, ctor, E.type_of_lustre_expr disc_e1)
+              if X.mem disc_idx eqs then
+                let (disc_e1, _) = X.find disc_idx eqs in
+                Some (disc_e1, ctor, E.type_of_lustre_expr disc_e1)
+              else None
             else None
         ) cstate.adt_map None in
         (* ctor must belong to some ADT in adt_map *)

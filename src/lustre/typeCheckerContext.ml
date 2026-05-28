@@ -262,9 +262,14 @@ let rec expand_type_syn: ?expanded:HString.t list -> tc_context -> tc_type -> tc
 let lookup_ty: tc_context -> LA.ident -> tc_type option
   = fun ctx i ->
   match (IMap.find_opt i (ctx.ty_ctx)) with
-  | Some ty -> Some (expand_type_syn ctx ty) 
+  | Some ty -> Some (expand_type_syn ctx ty)
   | None -> None
 (** Picks out the type of the identifier to type context map *)
+
+let lookup_ty_raw: tc_context -> LA.ident -> tc_type option
+  = fun ctx i -> IMap.find_opt i (ctx.ty_ctx)
+(** Picks out the raw (unexpanded) type of the identifier. Unlike [lookup_ty],
+    does not chase type synonyms or substitute depth parameters. *)
 
 let lookup_contract_ty: tc_context -> NI.t -> tc_type option
   = fun ctx i -> NI.Map.find_opt i (ctx.contract_ctx) 

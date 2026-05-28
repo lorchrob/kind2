@@ -102,6 +102,10 @@ val expand_type_syn: ?expanded:LA.ident list -> tc_context -> tc_type -> tc_type
 val lookup_ty: tc_context -> LA.ident -> tc_type option
 (** Picks out the type of the identifier to type context map *)
 
+val lookup_ty_raw: tc_context -> LA.ident -> tc_type option
+(** Picks out the raw (unexpanded) type of the identifier, without chasing
+    type synonyms. Needed to inspect depth annotations on bounded ADT vars. *)
+
 val lookup_contract_ty: tc_context -> NI.t -> tc_type option
 (** Lookup a contract type  *)
                           

@@ -1041,9 +1041,21 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
     (match lookup_constructor ctx i with
     | Some _ -> infer_type_expr ctx nname (LA.ADTTerm (pos, i, None, []))
     | None ->
-      match (lookup_ty ctx i) with
+      match lookup_ty_raw ctx i with
       | None -> type_error pos (UnboundIdentifier i)
-      | Some ty -> R.ok (ty, e, []))
+      | Some raw_ty ->
+        let ty = match raw_ty with
+          | LA.UserType (tpos, ty_args, n, Some k_expr)
+            when (match lookup_ty_syn ctx n [] with
+                  | Some (LA.ADT (_, _, Some _, _)) -> true | _ -> false) ->
+            (match IC.eval_int_expr ctx k_expr with
+            | Ok k_val ->
+              let k_const = LA.Const (tpos, LA.Num (HString.mk_hstring (string_of_int k_val))) in
+              LA.UserType (tpos, ty_args, n, Some k_const)
+            | Error _ -> expand_type_syn ctx raw_ty)
+          | _ -> expand_type_syn ctx raw_ty
+        in
+        R.ok (ty, e, []))
   | LA.ModeRef (pos, ids) ->      
     let lookup_mode_ty ctx (ids:HString.t list) =
       match ids with
@@ -1594,15 +1606,16 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
     (match lookup_constructor ctx ctor with
     | None -> type_error pos (UnboundConstructor ctor)
     | Some (ty_name, field_tys) ->
-      let* (effective_field_tys, result_ty) = (match k with
+      let* (effective_field_tys, result_ty, norm_k) = (match k with
         | None ->
           (match lookup_ty_syn ctx ty_name [] with
           | Some (LA.ADT (_, _, Some _, _)) -> type_error pos (UnannotatedBoundedADTCtor ctor)
-          | _ -> R.ok (field_tys, LA.UserType (pos, [], ty_name, None)))
+          | _ -> R.ok (field_tys, LA.UserType (pos, [], ty_name, None), None))
         | Some k_expr ->
           (match lookup_ty_syn ctx ty_name [] with
           | Some (LA.ADT (_, _, Some _, _)) ->
             let* k_val = check_bounded_adt_depth ctx pos k_expr in
+            let k_const = LA.Const (pos, LA.Num (HString.mk_hstring (string_of_int k_val))) in
             let is_recursive = List.exists (function
               | LA.UserType (_, _, n, _) -> n = ty_name | _ -> false) field_tys in
             let child_k_val = if is_recursive then k_val - 1 else k_val in
@@ -1610,7 +1623,7 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
             let eff_fts = List.map (function
               | LA.UserType (p, a, n, None) when n = ty_name -> LA.UserType (p, a, n, Some child_k_expr)
               | ft -> ft) field_tys in
-            R.ok (eff_fts, LA.UserType (pos, [], ty_name, Some k_expr))
+            R.ok (eff_fts, LA.UserType (pos, [], ty_name, Some k_const), Some k_const)
           | _ -> type_error pos (BoundAnnotationOnNonBoundedCtor ctor))) in
       if List.length args <> List.length effective_field_tys then
         type_error pos (ConstructorArityMismatch (ctor, List.length effective_field_tys, List.length args))
@@ -1619,7 +1632,7 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
           check_type_expr ctx nname arg ft
         ) args effective_field_tys) in
         let checked_args, warnings = List.split pairs in
-        R.ok (result_ty, LA.ADTTerm (pos, ctor, k, checked_args), List.flatten warnings)
+        R.ok (result_ty, LA.ADTTerm (pos, ctor, norm_k, checked_args), List.flatten warnings)
     )
 (** Infer the type of a [LA.expr] with the types of free variables given in [tc_context] *)
 
@@ -2109,8 +2122,16 @@ and check_type_node_decl: Lib.position -> tc_context -> bool -> LA.node_decl -> 
         in
         Debug.parse "TC declaration node %a done }"
           NI.pp_print_node_id_user_name node_name;
-        let decl = 
-          node_name, is_extern, opacity, params, input_vars, output_vars, ldecls, items, contract 
+        let* input_vars = R.seq (List.map (fun (p, id, ty, clk, is_const) ->
+          let* ty, _ = check_type_well_formed ctx_plus_ops_and_ips Input (Some node_name) is_const ty in
+          R.ok (p, id, ty, clk, is_const)
+        ) input_vars) in
+        let* output_vars = R.seq (List.map (fun (p, id, ty, clk) ->
+          let* ty, _ = check_type_well_formed ctx_plus_ops_and_ips Output (Some node_name) false ty in
+          R.ok (p, id, ty, clk)
+        ) output_vars) in
+        let decl =
+          node_name, is_extern, opacity, params, input_vars, output_vars, ldecls, items, contract
         in
         check_lhs_eqns >> R.ok (decl, List.flatten warnings1 @ List.flatten warnings2))
 
@@ -2907,8 +2928,9 @@ and check_type_well_formed: tc_context -> source -> NI.t option -> bool -> tc_ty
         | Some (LA.ADT (_, _, Some _, _)) when depth_annotation = None ->
           type_error pos (UnannotatedBoundedADTType i)
         | Some (LA.ADT (_, _, Some _, _)) ->
-          let* _ = check_bounded_adt_depth ctx pos (Option.get depth_annotation) in
-          R.ok (ty', [])
+          let* k_val = check_bounded_adt_depth ctx pos (Option.get depth_annotation) in
+          let k_const = LA.Const (pos, LA.Num (HString.mk_hstring (string_of_int k_val))) in
+          R.ok (LA.UserType (pos, ty_args, i, Some k_const), [])
         | _ when Option.is_some depth_annotation ->
           type_error pos (BoundAnnotationOnNonBoundedType i)
         | Some (LA.ADT _) (* Already validated at declaration *)

@@ -37,6 +37,7 @@ module HStringMap = HString.HStringMap
 
 type adt_info = {
   type_name : HString.t;
+  base_name : HString.t;
   disc_field : HString.t;
   disc_enum : HString.t;
   ctor_variants : HString.t list;
@@ -45,6 +46,8 @@ type adt_info = {
 }
 
 type adt_map = adt_info HStringMap.t
+
+val bounded_type_name : HString.t -> int -> HString.t
 
 val record_type_of_adt : Lib.position -> adt_info -> LustreAst.lustre_type
 
