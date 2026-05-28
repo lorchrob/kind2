@@ -1352,10 +1352,11 @@ let rec pp_print_lustre_path_pt' ?(full_contract=false) is_top const_map const_f
   let adt_map = globals.G.adt_map in
   let all_input_bindings = D.bindings inputs in
   let all_output_bindings = D.bindings outputs in
-  let all_local_bindings = List.map D.bindings node.N.locals |> List.flatten in
   let adt_inputs = adt_streams_from_bindings adt_map model node all_input_bindings in
   let adt_outputs = adt_streams_from_bindings adt_map model node all_output_bindings in
-  let adt_locals = adt_streams_from_bindings adt_map model node all_local_bindings in
+  let adt_locals = List.concat_map
+    (fun local_dt -> adt_streams_from_bindings adt_map model node (D.bindings local_dt))
+    node.N.locals in
 
   (* Sample inputs, outputs and locals on clock *)
   let globals', constants', inputs', outputs', ghosts', locals'  = match clock with
@@ -2116,8 +2117,9 @@ let pp_print_streams_json is_top const_map const_funcs globals ppf
   let adt_map = globals.G.adt_map in
   let adt_inputs = adt_streams_from_bindings adt_map model node (D.bindings inputs) in
   let adt_outputs = adt_streams_from_bindings adt_map model node (D.bindings outputs) in
-  let adt_locals = adt_streams_from_bindings adt_map model node
-    (List.map D.bindings node.N.locals |> List.flatten) in
+  let adt_locals = List.concat_map
+    (fun local_dt -> adt_streams_from_bindings adt_map model node (D.bindings local_dt))
+    node.N.locals in
   let adt_tagged =
     List.map (fun s -> ("input", s)) adt_inputs
     @ List.map (fun s -> ("output", s)) adt_outputs
