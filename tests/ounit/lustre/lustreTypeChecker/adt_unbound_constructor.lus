@@ -1,6 +1,4 @@
-datatype Color = Red | Green | Blue;
-
-node N (c: Color) returns (r: bool);
+node N (c: Color) returns (r: bool)
 let
   r = match c with
     | Red : true
@@ -8,3 +6,5 @@ let
     | Blue : false
   end;
 tel
+
+datatype Color = Red | Green | Blue;

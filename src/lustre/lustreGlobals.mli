@@ -22,11 +22,15 @@
 
 (** *)
 
+module HStringMap = HString.HStringMap
+
 type state_var_bounds = (LustreExpr.expr LustreExpr.bound_or_fixed list)
         StateVar.StateVarHashtbl.t
 
-type t = 
-  { 
+type adt_map = LustreDesugarADTs.adt_map
+
+type t =
+  {
     free_constants : (LustreIdent.t * Var.t LustreIndex.t * bool) list;
     (** Free constants: ident, variable index, is_generated *)
 
@@ -35,5 +39,8 @@ type t =
 
     global_constraints: LustreExpr.t list;
     (** Constraints on free constants *)
+
+    adt_map : adt_map;
+    (** ADT type metadata for counterexample reconstruction *)
   }
 
