@@ -47,7 +47,6 @@ module TM = Type.TypeMap
 module Ctx = TypeCheckerContext
 
 module StringMap = HString.HStringMap
-
 type compiler_state = {
   nodes : LustreNode.t list;
   type_alias : Type.t LustreIndex.t StringMap.t;
@@ -739,16 +738,27 @@ let field_name_to_index adt_map field_hs =
   | Some idx -> idx
   | None -> X.RecordIndex field_str
 
+(* Given an index path, return a source override for ADT-generated fields.
+   AdtTagIndex -> Generated (Discriminant type_name)
+   AdtPayloadIndex -> Generated Plain
+   Otherwise -> the natural default_source *)
+let adt_source_for_index default_source index =
+  match List.rev index with
+  | X.AdtTagIndex type_name :: _ -> N.Generated (N.Discriminant (HString.mk_hstring type_name))
+  | X.AdtPayloadIndex _ :: _ -> N.Generated N.Plain
+  | _ -> default_source
+
 let rec compile ctx gids adt_map decls =
   let over_decls cstate decl = compile_declaration cstate gids ctx decl in
-  let output = List.fold_left over_decls { (empty_compiler_state ()) with adt_map } decls in 
+  let output = List.fold_left over_decls { (empty_compiler_state ()) with adt_map } decls in
   let free_constants = output.free_constants
     |> List.map (fun (_, id, v, is_generated) -> mk_ident id, v, is_generated)
   in
   output.nodes,
     { G.free_constants = free_constants;
       G.state_var_bounds = output.state_var_bounds;
-      G.global_constraints = output.global_constraints }
+      G.global_constraints = output.global_constraints;
+      G.adt_map = adt_map }
 
 and compile_ast_type
   ?(expand=false)
@@ -1899,6 +1909,7 @@ and compile_node_decl gids_map is_function opac cstate ctx node_id ext params in
         let ident = mk_ident i in
         let index_types = compile_ast_type cstate ctx map ast_type in
         let over_indices = fun index index_type (accum1, accum2) ->
+          let source = adt_source_for_index N.Input index in
           let possible_state_var = mk_state_var
             ~is_input:true
             ~is_const
@@ -1907,7 +1918,7 @@ and compile_node_decl gids_map is_function opac cstate ctx node_id ext params in
             ident
             index
             index_type
-            (Some N.Input)
+            (Some source)
           in
           match possible_state_var with
           | Some state_var ->
@@ -1937,6 +1948,7 @@ and compile_node_decl gids_map is_function opac cstate ctx node_id ext params in
         let ident = mk_ident i in
         let index_types = compile_ast_type cstate ctx map ast_type in
         let over_indices = fun index index_type (accum1, accum2) ->
+          let source = adt_source_for_index N.Output index in
           let possible_state_var = mk_state_var
             ~is_input:false
             map
@@ -1944,7 +1956,7 @@ and compile_node_decl gids_map is_function opac cstate ctx node_id ext params in
             ident
             index
             index_type
-            (Some N.Output)
+            (Some source)
           in
           let index' = if is_single then index
             else X.ListIndex n :: index
@@ -1974,6 +1986,7 @@ and compile_node_decl gids_map is_function opac cstate ctx node_id ext params in
         let ident = mk_ident i
         and index_types = compile_ast_type cstate ctx map ast_type in
         let over_indices = fun index index_type accum ->
+          let source = adt_source_for_index N.Local index in
           let possible_state_var = mk_state_var
             ~is_input:false
             map
@@ -1981,7 +1994,7 @@ and compile_node_decl gids_map is_function opac cstate ctx node_id ext params in
             ident
             index
             index_type
-            (Some N.Local)
+            (Some source)
           in
           match possible_state_var with
           | Some state_var -> X.add index state_var accum
@@ -2024,7 +2037,7 @@ and compile_node_decl gids_map is_function opac cstate ctx node_id ext params in
           index 
           (* (if Type.is_array index_type then index else X.empty_index) *)
           index_type
-          (Some N.Generated)
+          (Some (N.Generated N.Plain))
         in
         match possible_state_var with
         | Some state_var -> X.add index state_var accum
@@ -2059,7 +2072,7 @@ and compile_node_decl gids_map is_function opac cstate ctx node_id ext params in
           ident
           index
           index_type
-          (Some N.Generated)
+          (Some (N.Generated N.Plain))
         in
         match possible_state_var with
         | Some state_var -> X.add index state_var accum
@@ -2081,7 +2094,7 @@ and compile_node_decl gids_map is_function opac cstate ctx node_id ext params in
           ident
           index
           index_type
-          (Some N.Generated)
+          (Some (N.Generated N.Plain))
         in
         match possible_state_var with
         | Some state_var -> X.add index state_var accum
@@ -2104,7 +2117,7 @@ and compile_node_decl gids_map is_function opac cstate ctx node_id ext params in
           ident
           index
           index_type
-          (Some N.Generated)
+          (Some (N.Generated N.Plain))
         in
         match possible_state_var with
         | Some state_var -> X.add index state_var accum
