@@ -222,8 +222,8 @@ let type_check declarations =
     let* _ = LAD.check_inductive_array_dependencies inlined_global_ctx node_summary const_inlined_nodes_and_contracts in
 
     (* Step 17. Infer tighter subrange constraints with abstract interpretation *)
-    let* _ = LIA.interpret_global_consts inlined_global_ctx const_inlined_type_and_consts in
-    let abstract_interp_ctx = LIA.interpret_program inlined_global_ctx gids const_inlined_nodes_and_contracts in
+    (*let* _ = LIA.interpret_global_consts inlined_global_ctx const_inlined_type_and_consts in
+    let abstract_interp_ctx = LIA.interpret_program inlined_global_ctx gids const_inlined_nodes_and_contracts in*)
 
     (* Step 18. Instantiate polymorphic nodes with concrete types *)
     let inlined_global_ctx, gids, const_inlined_nodes_and_contracts = LIP.instantiate_polymorphic_nodes inlined_global_ctx gids const_inlined_nodes_and_contracts in
@@ -251,7 +251,7 @@ let type_check declarations =
 
     (* Step 22. Normalize AST: guard pres, abstract to locals where appropriate *)
     let* (normalized_decls, gids, warnings6) =
-      LAN.normalize adt_map inlined_global_ctx abstract_interp_ctx inlinable_funcs
+      LAN.normalize adt_map inlined_global_ctx LIA.empty_context inlinable_funcs
                     (const_inlined_type_and_consts @ const_inlined_nodes_and_contracts) gids
     in
 

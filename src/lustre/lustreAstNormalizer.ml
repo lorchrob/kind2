@@ -2745,7 +2745,7 @@ and normalize_ty ?(guard = None) ?(id = None) info node_id map ty =
   | Set (p, ty) -> 
     let ty, gids, warnings = normalize_ty ~guard ~id info node_id map ty in 
     Set (p, ty), gids, warnings 
-  | ADT _ -> assert false (* desugared before normalization by lustreDesugarADTs *)
+  | ADT _ -> assert false 
   | Int _ | History _ | Bool _ | Real _ | IntRange _
   | UserType _ | AbstractType _
   | EnumType _ | SBitVector _ | UBitVector _ -> ty, empty (), []
