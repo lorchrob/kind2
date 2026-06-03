@@ -1091,11 +1091,11 @@ and check_expr: context -> (context -> LA.expr -> ([> warning] list, ([> error] 
     >> (no_temporal_operator "branches of an if-then-otherwise" e)
     >> (f ctx e)
   in
-  let lazy_match ctx e =
+  (*let lazy_match ctx e =
     (no_calls_to_node "an arm of a match expression" ctx e)
     >> (no_temporal_operator "arms of a match expression" e)
     >> (f ctx e)
-  in
+  in*)
   let lazy_bool_op op ctx e =
     (no_calls_to_node ("the argument of " ^ op)  ctx e)
     >> (no_temporal_operator ("arguments of " ^ op) e)
@@ -1247,8 +1247,8 @@ and check_expr: context -> (context -> LA.expr -> ([> warning] list, ([> error] 
           ctx (pat_vars pat)
         in
         let* warnings = check_expr ctx' f body in 
-        let* warnings' = check_expr ctx' lazy_match body in 
-        Res.ok (warnings @ warnings')
+        (*let* warnings' = check_expr ctx' lazy_match body in *)
+        Res.ok (warnings (*@ warnings'*))
       ) arms) in
       Ok (warnings1 @ List.flatten warnings2)
     | ADTTerm (_, ty_args, _, args) ->
