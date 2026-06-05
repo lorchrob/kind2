@@ -2519,9 +2519,13 @@ and tc_ctx_of_ty_decl: tc_context -> LA.type_decl -> (LA.type_decl * tc_context,
           type_error pos (Redeclaration (HString.mk_hstring "Enum value or constant"))
       | LA.ADT (_, _, cons) ->
         let ctx' = add_ty_syn ctx i ty in
-        let ctx'' = List.fold_left (fun acc (ctor, field_tys) ->
-          add_adt_ctor acc ctor i field_tys
-        ) ctx' cons in
+        let* ctx'' = R.seq_chain
+          (fun acc (ctor, field_tys) ->
+            match lookup_constructor acc ctor with
+            | Some (existing_ty, _) when not (HString.equal existing_ty i) ->
+              type_error pos (DuplicateConstructor (ctor, existing_ty, i))
+            | _ -> R.ok (add_adt_ctor acc ctor i field_tys))
+          ctx' cons in
         R.ok (LA.AliasType (pos, i, ps, ty), ctx'')
       | _ -> R.ok (LA.AliasType (pos, i, ps, ty), add_ty_syn ctx i ty))
   | LA.FreeType (pos, i) ->
@@ -2996,19 +3000,13 @@ and check_type_well_formed: tc_context -> source -> NI.t option -> bool -> tc_ty
           type_error (LH.pos_of_expr e1) (ExpectedIntegerExpression inf_ty)
       )
     | ADT (pos, new_ty_name, ctors) ->
-        Format.printf "Got here 1!\n";
       let* ctors, all_warnings = R.seq (List.map (fun (ctor, tys) ->
         let* _ = (match lookup_constructor ctx ctor with
           | Some (existing_ty_name, _) ->
-        Format.printf "Got here 2 %a %a %a!\n"
-          HString.pp_print_hstring ctor
-          HString.pp_print_hstring existing_ty_name 
-          HString.pp_print_hstring new_ty_name;
             if existing_ty_name <> new_ty_name then
               type_error pos (DuplicateConstructor (ctor, existing_ty_name, new_ty_name))
             else R.ok ()
           | None ->
-              Format.printf "Got here 3 !\n";
             (match lookup_const ctx ctor with
             | Some _ -> type_error pos (ConstructorNameClashWithConst (ctor, new_ty_name))
             | None -> R.ok ())) in

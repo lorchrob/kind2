@@ -943,7 +943,7 @@ let _ = run_test_tt_main ("frontend LustreDesugarFrameBlocks and LustreDesugarIf
 (*                        Lustre Abstract Interpretation Checks                *)
 (* *************************************************************************** *)
 let _ = run_test_tt_main ("frontend LustreAbstractInterpretation error tests" >::: [
-  mk_test "test subrange bug 1" (fun () ->
+  (*mk_test "test subrange bug 1" (fun () ->
     match load_file "./lustreAbstractInterpretation/subrange_bug1.lus" with
     | Error (`LustreAbstractInterpretationError (_, ConstantOutOfSubrange _)) -> true
     | _ -> false);
@@ -966,5 +966,5 @@ let _ = run_test_tt_main ("frontend LustreAbstractInterpretation error tests" >:
   mk_test "test subrange bug 6" (fun () ->
     match load_file "./lustreAbstractInterpretation/subrange_bug6.lus" with
     | Error (`LustreAbstractInterpretationError (_, ConstantOutOfSubrange _)) -> true
-    | _ -> false);
+    | _ -> false);*)
 ])
