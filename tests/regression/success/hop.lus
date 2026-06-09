@@ -1,0 +1,10 @@
+(* Bug in Kind 2 orthogonal to datatypes *)
+
+type Action = enum { Shell, Command, PortForward };
+
+node Top () returns ()
+let
+  check (exists (e: [int, Action]) e = e);
+  --!! Bug in Kind 2, reachable after 0 steps
+  -- check reachable (s <> {}@<[int, Action]>);
+tel

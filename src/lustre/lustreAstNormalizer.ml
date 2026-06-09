@@ -423,8 +423,13 @@ let mk_fresh_dummy_index _ =
   let name = HString.concat2 prefix (HString.mk_hstring "_index") in
   name
 
+<<<<<<< Updated upstream
 let rec mk_enum_range_expr ?(force_prop = false) ?(mk_enum=true) ?(mk_range=true) ctx node_id expr_type expr =
   let rec mk ctx n expr_type expr = 
+=======
+let rec mk_enum_range_expr ?(force_prop = false) ?(mk_enum=true) ?(mk_range=true) adt_map ctx node_id expr_type expr =
+  let rec mk ctx n expr_type expr =
+>>>>>>> Stashed changes
     let expr_type = Chk.expand_type_syn_reftype_history ctx expr_type |> unwrap in
     match expr_type with
     | A.EnumType (_, _, values) when mk_enum -> (
@@ -495,6 +500,7 @@ let rec mk_enum_range_expr ?(force_prop = false) ?(mk_enum=true) ?(mk_range=true
       let body = fun e -> A.BinaryOp (dpos, A.Impl, assumption, e) in
       List.map (fun (e, is_original) -> A.Quantifier (dpos, A.Forall, [var], body e), is_original) rexpr
     | TupleType (p, tys) ->
+<<<<<<< Updated upstream
       let mk_proj i = A.IndexAccess (dpos, expr, A.Const (p, A.Num (i |> string_of_int |> HString.mk_hstring)), A.Tuple) in
       let tys = List.filter (fun ty -> Ctx.type_contains_enum_or_subrange ctx ty) tys in
       let tys = List.mapi (fun i ty -> mk ctx n ty (mk_proj i)) tys in
@@ -504,6 +510,39 @@ let rec mk_enum_range_expr ?(force_prop = false) ?(mk_enum=true) ?(mk_range=true
       let tys = List.filter (fun (_, _, ty) -> Ctx.type_contains_enum_or_subrange ctx ty) tys in
       let tys = List.map (fun (_, i, ty) -> mk ctx n ty (mk_proj i)) tys in
       List.fold_left (@) [] tys
+=======
+      List.mapi (fun i ty ->
+        let i = i |> string_of_int |> HString.mk_hstring in
+        mk ctx n ty (A.IndexAccess (dpos, expr, A.Const (p, A.Num i), A.Tuple))
+      ) tys |> List.flatten
+    | RecordType (_, rname, tys) ->
+      (* If record type came from desugared ADT, the constraint only applies 
+         if the constructor is selected *)
+      (match LDAT.HStringMap.find_opt rname adt_map with
+      | Some adt_info ->
+        let tag_expr = A.RecordProject (dpos, expr, adt_info.LDAT.disc_field) in
+        List.concat_map (fun (_, fname, ftype) ->
+          if not (Ctx.type_contains_enum_or_subrange ctx ftype) then []
+          else
+            let constraints = mk ctx n ftype (A.RecordProject (dpos, expr, fname)) in
+            if HString.equal fname adt_info.LDAT.disc_field || constraints = [] then constraints
+            else
+              let ctor_opt = LDAT.HStringMap.fold (fun ctor fields acc ->
+                match acc with Some _ -> acc | None ->
+                if List.exists (fun (fn, _) -> HString.equal fn fname) fields then Some ctor else None
+              ) adt_info.LDAT.ctor_fields None in
+              match ctor_opt with
+              | None -> constraints
+              | Some ctor ->
+                let guard = A.CompOp (dpos, A.Eq, tag_expr, A.Ident (dpos, ctor)) in
+                List.map (fun (c, is_orig) -> A.BinaryOp (dpos, A.Impl, guard, c), is_orig) constraints
+        ) tys
+      | None ->
+        let mk_proj i = A.RecordProject (dpos, expr, i) in
+        let tys = List.filter (fun (_, _, ty) -> Ctx.type_contains_enum_or_subrange ctx ty) tys in
+        let tys = List.map (fun (_, i, ty) -> mk ctx n ty (mk_proj i)) tys in
+        List.fold_left (@) [] tys)
+>>>>>>> Stashed changes
    | A.Set (_, kt) -> 
       let idx_str = HString.concat2 (HString.mk_hstring "x") 
                                     (HString.mk_hstring (string_of_int n)) in
