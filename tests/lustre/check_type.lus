@@ -1,6 +1,6 @@
 type tup = [bool, subrange [-2, 2] of int, real];
 
-type rec = {b: bool; c: [int, real, bool]; d: tup; a: int^3};
+type rec = struct {b: bool; c: [int, real, bool]; d: tup; a: int^3};
 
 const a : tup = [true, 1, 0.1];
 const b : rec = rec { c = [1, 1E1, false]; a = [1, 2, 3]; d = [true, -1, 0.5]; b = true };
@@ -20,7 +20,7 @@ const c_cond : /* subrange [1, 2] of */ int = if true then 1 else 2;
 
 const c_ = c_cond;
 
-type r = { three: [int, bool]; one: int; two: real };
+type r = struct { three: [int, bool]; one: int; two: real };
 
 type s = [r, int];
 
@@ -41,7 +41,7 @@ let
   (a1, a2, a3, a4) = ((1 + 5 + c_, 2.0), (false, 3));
 tel
 
-type pair = { one, two: int };
+type pair = struct { one, two: int };
 
 node X (a1: real; a2: int) returns (b0: [real, int]; c0: [int,  bool]);
   --@ensures a1 > 0.0;
@@ -151,17 +151,17 @@ tel
 -- Records 
 
 -- Record type 
-type r_1 = { one: int; two: real; three : enum { red, green, blue } };
+type r_1 = struct { one: int; two: real; three : enum { red, green, blue } };
 
 -- Two records can have the same field 
-type r_2 = { one: r_1; two: r_1 };
+type r_2 = struct { one: r_1; two: r_1 };
 
 -- Records can be nested
-type r_3 = { one: int };
-type r_4 = { one: r_3 };
+type r_3 = struct { one: int };
+type r_4 = struct { one: r_3 };
 
 -- Records cannot be recursive
--- type re_1 = { one: re_1 };
+-- type re_1 = struct { one: re_1 };
 
 
 -- Tuples 
@@ -195,7 +195,7 @@ type l_4 = b_1;
 
 type l_5 = f_1;
 
-type r_5 = { one: f_1 };
+type r_5 = struct { one: f_1 };
 
 type r_6 = r_5;
 
@@ -261,15 +261,15 @@ const f_14 : t_2;
 
 type j = enum { red, green, blue };
 type j2 = enum { red, green, blue };
-type k = { one: int; two: real; three : enum { red, green, blue } };
-type k2 = { one: int; two: real; three : enum { red, green, blue }; four: int };
+type k = struct { one: int; two: real; three : enum { red, green, blue } };
+type k2 = struct { one: int; two: real; three : enum { red, green, blue }; four: int };
 
-type l = { one: k; two: k };
+type l = struct { one: k; two: k };
 
 
-type m0 = { one: int };
-type m1 = { one: m0 };
-type m2 = { one: m1 };
+type m0 = struct { one: int };
+type m1 = struct { one: m0 };
+type m2 = struct { one: m1 };
 
 type g = int^(1+1);
 type i = int^4^3;

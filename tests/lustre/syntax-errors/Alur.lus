@@ -126,7 +126,7 @@ tel
 -- 'value', containing the Boolean value of the event.
 -- The content of 'value' is meaningful only when 'status' is 'Top'.
 
-type bool_event = {status: event; value: bool } ;
+type bool_event = struct {status: event; value: bool } ;
 
 function bool_Pres(e: bool_event) returns (b: bool) ;
 let

@@ -52,7 +52,7 @@ type error_kind = Unknown of string
   | TupleIndexOutOfBounds of int * tc_type
   | IlltypedTupleProjection of tc_type
   | NonConcreteTupleProjection of LA.expr 
-  | UnequalIteBranchTypes of tc_type * tc_type
+  | UnequalIteBranchTypes of LustreAst.ternary_operator * tc_type * tc_type
   | ExpectedBooleanExpression of tc_type
   | ExpectedIntegerExpression of tc_type
   | Unsupported of string
@@ -121,6 +121,8 @@ type error_kind = Unknown of string
   | UnboundConstructor of HString.t
   | ConstructorArityMismatch of HString.t * int * int
   | MatchScrutineeNotADT of tc_type
+  | TesterArgumentNotADT of tc_type
+  | ConstructorPatternNotADT of HString.t * tc_type
   | UnequalMatchArmTypes of tc_type * tc_type
   | DuplicateConstructor of HString.t * HString.t * HString.t
   | ConstructorNameClashWithConst of HString.t * HString.t
@@ -153,8 +155,10 @@ let error_message kind = match kind with
   | TupleIndexOutOfBounds (id, ty) -> "Index " ^ string_of_int id ^ " is out of bounds for tuple type " ^ string_of_tc_type ty
   | IlltypedTupleProjection ty -> "Cannot project field out of non tuple type " ^ string_of_tc_type ty
   | NonConcreteTupleProjection e -> "Tuple projection '" ^ LA.string_of_expr e ^ "' must be a concrete natural number"
-  | UnequalIteBranchTypes (ty1, ty2) -> "Expected equal types of each if-then-else or when-then-else branch but found: "
-    ^ string_of_tc_type ty1 ^ " on the then-branch and " ^ string_of_tc_type ty2 ^ " on the the else-branch"
+  | UnequalIteBranchTypes (op, ty1, ty2) ->
+    let form = match op with LA.Ite -> "if-then-else" | LA.LazyIte -> "when-then-else" in
+    "Expected equal types of each " ^ form ^ " branch but found: "
+    ^ string_of_tc_type ty1 ^ " on the then-branch and " ^ string_of_tc_type ty2 ^ " on the else-branch"
   | ExpectedBooleanExpression ty -> "Expected a boolean expression but found expression of type " ^ string_of_tc_type ty
   | ExpectedIntegerExpression ty -> "Expected an integer expression but found expression of type "  ^ string_of_tc_type ty
   | Unsupported s -> "Unsupported: " ^ s
@@ -263,7 +267,13 @@ let error_message kind = match kind with
     "Constructor '" ^ HString.string_of_hstring id ^ "' expects " ^
     string_of_int expected ^ " argument(s) but got " ^ string_of_int got
   | MatchScrutineeNotADT ty ->
-    "Tester argument or match scrutinee must be an algebraic data type but found type " ^ string_of_tc_type ty
+    "Match scrutinee must be an algebraic data type but found type " ^ string_of_tc_type ty
+  | TesterArgumentNotADT ty ->
+    "Tester argument must be an algebraic data type but found type " ^ string_of_tc_type ty
+  | ConstructorPatternNotADT (ctor, ty) ->
+    "Constructor pattern '" ^ HString.string_of_hstring ctor ^
+    "' cannot match a value of type " ^ string_of_tc_type ty ^
+    ", which is not an algebraic data type"
   | UnequalMatchArmTypes (ty1, ty2) ->
     "Match arm types do not agree: found " ^ string_of_tc_type ty1 ^ " and " ^ string_of_tc_type ty2
   | DuplicateConstructor (ctor, ty1, ty2) ->
@@ -1147,7 +1157,7 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
           R.ok (LA.Bool pos, LA.ADTTester (pos, e', c), warnings)
         else
           type_error pos (UnboundConstructor c))
-    | _ -> type_error pos (MatchScrutineeNotADT scrut_ty))
+    | _ -> type_error pos (TesterArgumentNotADT scrut_ty))
 
   (* Values *)
   | LA.Const (pos, c) -> 
@@ -1184,7 +1194,7 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
         let* e2_ty, e2, warnings3 = infer_type_expr ctx nname e2 in
         eq_lustre_type ctx e1_ty e2_ty >>= fun eq_test ->
           if eq_test then R.ok (e1_ty, LA.TernaryOp (pos, top, con, e1, e2), warnings1 @ warnings2 @ warnings3)
-          else type_error pos (UnequalIteBranchTypes (e1_ty, e2_ty))
+          else type_error pos (UnequalIteBranchTypes (top, e1_ty, e2_ty))
       | c_ty  ->  type_error pos  (ExpectedBooleanExpression c_ty))
     )
   | LA.ConvOp (pos, cop, e) ->
@@ -1634,7 +1644,7 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
               in
               R.ok (ctx', LA.Pat (pos, ctor, sub_pats'))
           )
-        | _ -> type_error pos (MatchScrutineeNotADT field_ty)
+        | _ -> type_error pos (ConstructorPatternNotADT (ctor, field_ty))
         )
     in
     let* scrut_ty, scrutinee, warnings1 = infer_type_expr ctx nname scrutinee in

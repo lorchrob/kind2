@@ -37,7 +37,7 @@ type error_kind = Unknown of string
   | TupleIndexOutOfBounds of int * tc_type
   | IlltypedTupleProjection of tc_type
   | NonConcreteTupleProjection of LA.expr 
-  | UnequalIteBranchTypes of tc_type * tc_type
+  | UnequalIteBranchTypes of LustreAst.ternary_operator * tc_type * tc_type
   | ExpectedBooleanExpression of tc_type
   | ExpectedIntegerExpression of tc_type
   | Unsupported of string
@@ -106,6 +106,8 @@ type error_kind = Unknown of string
   | UnboundConstructor of HString.t
   | ConstructorArityMismatch of HString.t * int * int
   | MatchScrutineeNotADT of tc_type
+  | TesterArgumentNotADT of tc_type
+  | ConstructorPatternNotADT of HString.t * tc_type
   | UnequalMatchArmTypes of tc_type * tc_type
   | DuplicateConstructor of HString.t * HString.t * HString.t
   | ConstructorNameClashWithConst of HString.t * HString.t

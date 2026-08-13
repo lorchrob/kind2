@@ -19,8 +19,7 @@ type g = [d, [int, bool]];
 -- Declare a record type
 type h = struct { one : int; two : bool };
 
--- Declare a nested record type, keyword struct is optional in record
--- type declaration
+-- Declare a nested record type
 type i2 = struct { a : int; b: bool };
 type i = struct { one: i2;  two : bool; };
 

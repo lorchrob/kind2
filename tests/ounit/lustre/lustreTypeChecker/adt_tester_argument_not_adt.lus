@@ -1,0 +1,6 @@
+datatype Color = Red | Green | Blue;
+
+node N (x: int) returns (r: bool);
+let
+  r = Red?(x);
+tel

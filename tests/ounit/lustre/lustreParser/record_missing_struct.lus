@@ -1,0 +1,6 @@
+type t = { f: int };
+
+node N(x: t) returns (y: int);
+let
+  y = x.f;
+tel

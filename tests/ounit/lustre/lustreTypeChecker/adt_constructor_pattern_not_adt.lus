@@ -1,0 +1,9 @@
+datatype Box = Wrap(f: int);
+datatype Pair = Mk(g: int);
+
+node N (x: Box) returns (r: int);
+let
+  r = match x with
+    | Wrap(Mk(z)) : z
+  end;
+tel

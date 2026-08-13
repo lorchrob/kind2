@@ -36,6 +36,7 @@ Breaking changes:
 - New syntax for [polymorphic types/nodes/contracts](https://kind.cs.uiowa.edu/kind2_user_doc/2_input/1_lustre.html#polymorphic-nodes).
 - New syntax for constructing/accessing [tuples](https://kind.cs.uiowa.edu/kind2_user_doc/2_input/9_tuples.html).
 - New element update syntax for [tuples](https://kind.cs.uiowa.edu/kind2_user_doc/2_input/9_tuples.html#element-update), [records](https://kind.cs.uiowa.edu/kind2_user_doc/2_input/13_records.html#element-update), and [arrays](https://kind.cs.uiowa.edu/kind2_user_doc/2_input/2_arrays.html#element-update).
+- The `struct` keyword is now required in [record](https://kind.cs.uiowa.edu/kind2_user_doc/2_input/13_records.html) type declarations, so that `{ ... }` is left free for refinement type syntax. Write `type rat = struct { n: real; d: real };` instead of `type rat = { n: real; d: real };`.
 - Abstract [functions](https://kind.cs.uiowa.edu/kind2_user_doc/2_input/1_lustre.html#functions) are now strictly enforced to behave as mathematical functions.
   - This behavior is no longer configurable via the `--enforce_func_congruence` flag, which has been removed.
   - For functions, the scope of assumptions is the current timestep only, as opposed to nodes where the scope extends to all previous timesteps.

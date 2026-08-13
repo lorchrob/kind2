@@ -42,6 +42,10 @@ let _ = run_test_tt_main ("frontend LustreParser error tests" >::: [
     match load_file "./lustreParser/mode_reqs_by_idents_no_self_ref.lus" with
     | Error (`LustreParserError  _) -> true
     | _ -> false);
+  mk_test "test record type declaration without struct keyword" (fun () ->
+    match load_file "./lustreParser/record_missing_struct.lus" with
+    | _ -> false
+    | exception LustreAst.Parser_error -> true);
 ])
 
 (* *************************************************************************** *)
@@ -858,6 +862,14 @@ let _ = run_test_tt_main ("frontend LustreTypeChecker error tests" >::: [
   mk_test "test match scrutinee is not an ADT" (fun () ->
     match load_file "./lustreTypeChecker/adt_match_scrutinee_not_adt.lus" with
     | Error (`LustreTypeCheckerError (_, MatchScrutineeNotADT _)) -> true
+    | _ -> false);
+  mk_test "test tester argument is not an ADT" (fun () ->
+    match load_file "./lustreTypeChecker/adt_tester_argument_not_adt.lus" with
+    | Error (`LustreTypeCheckerError (_, TesterArgumentNotADT _)) -> true
+    | _ -> false);
+  mk_test "test constructor pattern against a non-ADT field" (fun () ->
+    match load_file "./lustreTypeChecker/adt_constructor_pattern_not_adt.lus" with
+    | Error (`LustreTypeCheckerError (_, ConstructorPatternNotADT _)) -> true
     | _ -> false);
   mk_test "test unequal match arm types" (fun () ->
     match load_file "./lustreTypeChecker/adt_unequal_match_arm_types.lus" with

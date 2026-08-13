@@ -30,6 +30,11 @@ let mk_span start_pos end_pos =
   { A.start_pos = mk_pos start_pos;
     A.end_pos = mk_pos end_pos }
 
+let fail_missing_struct pos =
+  fail_at_position pos
+    "Record type declarations require the 'struct' keyword, \
+     as in 'type t = struct { f: int };'"
+
 %}
 
 (* Special characters *)
@@ -413,6 +418,16 @@ type_decl:
                         p,
                         A.RecordType (mk_pos $startpos, e, t)))
          l }
+
+  (* "struct" used to be optional; the body is still recognized here so that
+     omitting the keyword reports the fix instead of a bare syntax error *)
+  | TYPE; ident_list; EQUALS;
+    _t = tlist(LCURLYBRACKET, SEMICOLON, RCURLYBRACKET, typed_idents); SEMICOLON
+     { fail_missing_struct (mk_pos $startpos(_t)) }
+
+  | TYPE; ident_list; decl_static_params; EQUALS;
+    _t = tlist(LCURLYBRACKET, SEMICOLON, RCURLYBRACKET, typed_idents); SEMICOLON
+     { fail_missing_struct (mk_pos $startpos(_t)) }
 
 
 expr_opt:
