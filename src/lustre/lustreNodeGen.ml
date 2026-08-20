@@ -1523,36 +1523,15 @@ and compile_ast_expr
       | (X.ArrayIntIndex _ :: _), _
       | (X.SetMapIndex _ :: _), _ ->
         let over_key = fun key old_v acc ->
-          let cur_dim, inner_dims = match List.rev key with
-            | last :: rev_inner -> last, List.rev rev_inner
+          let inner_dims = match List.rev key with
+            | _ :: rev_inner -> List.rev rev_inner
             | [] -> assert false
           in
           let new_v = X.find inner_dims new_elem in
-          if Flags.Arrays.smt () then
-            (* TODO: the genuine SMT array-theory encoding does not compose
-               with the scalar, bound-variable-parameterized representation
-               the rest of this function builds; needs its own fix. *)
-            X.add key (E.mk_store old_v sel_term new_v) acc
-          else
-            (* Reduce the old and new values to base-typed terms over fresh
-               index variables. *)
-            let dim_type = function
-              | X.ArrayIntIndex _ -> Type.t_int
-              | X.ArrayVarIndex b | X.SetMapIndex b -> E.type_of_expr b
-              | _ -> assert false
-            in
-            let pos_var = E.mk_array_index_var 0 (dim_type cur_dim) in
-            let old_v = E.mk_select_and_push old_v pos_var in
-            let old_v, new_v, _ =
-              List.fold_left
-                (fun (old_v, new_v, cpt) idx ->
-                  let ivar = E.mk_array_index_var cpt (dim_type idx) in
-                  E.mk_select_and_push old_v ivar, E.mk_select_and_push new_v ivar, cpt + 1)
-                (old_v, new_v, 1)
-                inner_dims
-            in
-            let updated_v = E.mk_ite (E.mk_eq pos_var sel_term) new_v old_v in
-            X.add key updated_v acc
+          (* The update stays array-typed. Consumers reduce it with the array
+             axiom in Term.push_select, so it composes with nesting and with a
+             select at an arbitrary index *)
+          X.add key (E.mk_store old_v sel_term new_v) acc
         in
         X.fold over_key old_sub X.empty
       | [], _ -> assert false
