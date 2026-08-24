@@ -47,6 +47,12 @@ type adt_info = {
 
 type adt_map = adt_info HStringMap.t
 
+val wf_pred_id : HString.t -> NodeId.t
+(** Identifier of the generated well-formedness predicate for a recursive ADT,
+    tagged {!NodeId.WellFormedness}. The tag disambiguates it from any user
+    declaration of the same name and is how the predicate is recognized by the
+    passes that must treat it specially. *)
+
 val build_adt_info :
   HString.t ->
   HString.t list ->

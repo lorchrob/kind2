@@ -38,6 +38,7 @@ module LA = LustreAst
 module LH = LustreAstHelpers
 module Ctx = TypeCheckerContext
 module HStringMap = HString.HStringMap
+module NI = NodeId
 
 type adt_info = {
   type_name : HString.t;
@@ -72,6 +73,10 @@ let disc_field_name type_name =
 
 let payload_field_name_of ctor user_fname =
   HString.mk_hstring (HString.string_of_hstring ctor ^ "_" ^ HString.string_of_hstring user_fname)
+
+let wf_pred_id type_name =
+  HString.mk_hstring ("wf_" ^ HString.string_of_hstring type_name)
+  |> NI.mk_node_id ~node_type:NI.WellFormedness
 
 let build_adt_info type_name type_params ctors ~is_recursive =
   let disc_field = disc_field_name type_name in

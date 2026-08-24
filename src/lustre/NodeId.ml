@@ -27,6 +27,7 @@ type node_type =
   | ClockedExpr (* Generated for a temporal expression abstracted out of a when branch *)
   | DefinedConstant (* Defined global constant converted to function without args *)
   | FreeConstant (* Free global constant converted to function without args *)
+  | WellFormedness (* Generated recursive predicate for a recursive ADT's refinement types *)
  
 type t = {
   name : HString.t; (* Input name, probably not used *)
@@ -50,7 +51,8 @@ let pp_print_node_type ppf node_type =
       | ClockedExpr -> ".clocked_expr_"
       | FreeConstant -> ".free_constant_"
       | DefinedConstant -> ".def_constant_"
-      | Choose -> ".choose_")
+      | Choose -> ".choose_"
+      | WellFormedness -> ".wf_")
 
 let rec pp_print_monomorphization ppf monomorphization = 
   match monomorphization with 

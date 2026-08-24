@@ -318,8 +318,9 @@ let error_message kind = match kind with
   | UnsupportedRefinementInRecursiveAdtField (ty_name, field) ->
     "Recursive datatype '" ^ HString.string_of_hstring ty_name ^ "' has field '"
     ^ HString.string_of_hstring field
-    ^ "' with a refinement type; refinement types on fields of recursive datatypes \
-       are not yet supported"
+    ^ "' whose refinement type constrains the datatype's own recursive \
+       occurrence; refinement types are supported on a recursive datatype's other \
+       fields, but not on the self-referential field itself"
 
 type warning_kind =
   | UnusedBoundVariableWarning of HString.t
@@ -1447,7 +1448,8 @@ and infer_type_expr: tc_context -> NI.t option -> LA.expr -> (tc_type * LA.expr 
     in
     (* Disallow quantification over variables with types containing map or set types *)
     let* _ = R.seq_ (List.map (fun (pos, id, ty) -> 
-      if type_contains_array ctx ty || type_contains_map_or_set ctx ty then
+      if type_contains_array ctx ty || type_contains_map_or_set ctx ty
+         || type_contains_wf_adt ctx ty then
         type_error pos (UnsupportedQuantifiedVariable id)
       else
         R.ok ()
@@ -2993,8 +2995,10 @@ and check_map_set_type pos ctx ty =
     else R.ok ()
   | AbstractType _ | Bool _ | Int _
   | EnumType _ | Real _ | SBitVector _ | UBitVector _ -> Res.ok ()
-  | ADT (_, _, cons) ->
-    Res.seq_ (List.map (fun (_, fields) -> Res.seq_ (List.map (fun (_, ty) -> r ty) fields)) cons)
+  | ADT (_, _, cons) as ty ->
+    if type_contains_wf_adt ctx ty then type_error pos (UnsupportedMapType ty)
+    else
+      Res.seq_ (List.map (fun (_, fields) -> Res.seq_ (List.map (fun (_, ty) -> r ty) fields)) cons)
   in
   aux HString.HStringSet.empty ty
 
@@ -3234,27 +3238,24 @@ and check_type_well_formed: tc_context -> source -> NI.t option -> bool -> tc_ty
           | fn :: _ -> type_error pos (UnsupportedRecursiveAdtField (new_ty_name, fn))
           | [] -> R.ok ()
       in
-      (* Reject refinement types on ADT fields for now *)
-      let rec expand_ty_syn_chain ty = match ty with
+      let rec wraps_self_reference ty = match ty with
+        | LA.RefinementType (_, (_, _, ty), _) ->
+          is_recursive_field ty || wraps_self_reference ty
         | LA.UserType (_, ty_args, id) ->
           (match lookup_ty_syn ctx id ty_args with
-           | Some ty -> expand_ty_syn_chain ty
-           | None -> ty)
-        | _ -> ty
-      in
-      let ty_contains_refinement ty =
-        LH.contains_subtype_satisfying
-          (function LA.RefinementType _ -> true | _ -> false)
-          (expand_ty_syn_chain ty)
+           | Some ty -> wraps_self_reference ty
+           | None -> false)
+        | LA.Bool _ | LA.Int _ | LA.Real _ | LA.SBitVector _ | LA.UBitVector _
+        | LA.EnumType _ | LA.AbstractType _ | LA.ADT _ | LA.TupleType _
+        | LA.GroupType _ | LA.RecordType _ | LA.ArrayType _ | LA.Set _
+        | LA.Map _ | LA.TArr _ | LA.History _ -> false
       in
       let* () =
         if not is_recursive_adt then R.ok ()
         else
           match List.concat_map (fun (_, fields) ->
             List.filter_map (fun (fn, ty) ->
-              if is_recursive_field ty then None
-              else if ty_contains_refinement ty then Some fn
-              else None
+              if wraps_self_reference ty then Some fn else None
             ) fields
           ) ctors with
           | fn :: _ -> type_error pos (UnsupportedRefinementInRecursiveAdtField (new_ty_name, fn))

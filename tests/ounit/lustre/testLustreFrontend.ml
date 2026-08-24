@@ -945,8 +945,8 @@ let _ = run_test_tt_main ("frontend LustreTypeChecker error tests" >::: [
     match load_file "./lustreTypeChecker/adt_unsupported_recursive_unrelated_field.lus" with
     | Error (`LustreTypeCheckerError (_, UnsupportedRecursiveAdtField _)) -> true
     | _ -> false);
-  mk_test "test recursive ADT with a refinement-typed field is rejected" (fun () ->
-    match load_file "./lustreTypeChecker/adt_recursive_refinement_field.lus" with
+  mk_test "test refinement type on a recursive ADT's self-referential field is rejected" (fun () ->
+    match load_file "./lustreTypeChecker/adt_recursive_refinement_self_field.lus" with
     | Error (`LustreTypeCheckerError (_, UnsupportedRefinementInRecursiveAdtField _)) -> true
     | _ -> false);
   mk_test "test ADT tester type-checks" (fun () ->

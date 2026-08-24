@@ -634,6 +634,44 @@ and mk_ref_type_expr
     in
     exprs1 @ exprs2
 
+  | ADT (p, ty_name, ctors) ->
+    (* A recursive ADT's field constraints cannot be enumerated structurally --
+       the type is unbounded -- so they are carried by a generated recursive
+       well-formedness predicate instead. Non-recursive ADTs reaching here have
+       not been desugared to records yet (the normalizer only ever sees the
+       record form), so they are expanded in place, one arm per constructor. *)
+    let has_wf_predicate =
+      (match LDAT.HStringMap.find_opt ty_name adt_map with
+       | Some info -> info.LDAT.is_recursive
+       | None -> false)
+      && Ctx.type_contains_ref ctx ty
+    in
+    (* Don't generate constraints for T within T's wellformedness predicate.
+       This would create an infinite loop, as the way we encode constraints 
+       over recursive ADTs is with wellformedness predicates. *)
+    let defines_this_type =
+      match node_id with
+      | Some id -> NI.equal id (LDAT.wf_pred_id ty_name)
+      | None -> false
+    in
+    if defines_this_type then []
+    else if has_wf_predicate then
+      [A.Call (p, [], LDAT.wf_pred_id ty_name, [expr])]
+    else
+      let arms =
+        List.map (fun (ctor, fields) ->
+          let vars = List.map (fun (fname, _) -> A.VarPat (p, fname)) fields in
+          let conjuncts =
+            List.concat_map (fun (fname, fty) ->
+              mk_ref_type_expr adt_map ctx node_id (A.Ident (p, fname)) fty
+            ) fields
+          in
+          (A.Pat (p, ctor, vars), AH.mk_conj p conjuncts)
+        ) ctors
+      in
+      if List.for_all (fun (_, e) -> AH.expr_is_true e) arms then []
+      else [A.Match (p, expr, arms, None)]
+
   | _ -> []
 
 let mk_enum_reftype_constraints node_id info vars =
@@ -1326,7 +1364,7 @@ and normalize_node info map
     let vars = List.map (fun (p,id,ty,_,_) -> (p,id,ty)) inputs in
     add_ref_type_constraints info map Input (Some node_id) vars
   in
-  let gids5, warnings5 = 
+  let gids5, warnings5 =
     let vars = List.map (fun (p,id,ty,_) -> (p,id,ty)) outputs in
     add_ref_type_constraints info map Output (Some node_id) vars
   in

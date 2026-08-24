@@ -45,6 +45,7 @@ module LNC = LustreNameCalls
 module RMA = LustreRemoveMultAssign
 module LAD = LustreArrayDependencies
 module LGN = LustreGenNodes 
+module LGWF = LustreGenWfPredicates
 module LFR = LustreFlattenRefinementTypes
 module LGI = LustreGenRefTypeImpNodes
 module LIP = LustreInstantiatePolyNodes
@@ -178,6 +179,15 @@ let type_check declarations =
 
     (* Step 6. Desugar nondeterministic choice operators *)
     let node_contract_src = LGN.gen_nodes inlined_ctx node_contract_src in
+
+    (* Step 6b. Generate a recursive well-formedness predicate for each recursive
+       ADT carrying a refinement type. Emitted before dependency analysis so the
+       generated functions are sorted and type checked alongside user code. *)
+    let node_contract_src =
+      let adt_map = LDAT.build_adt_map const_inlined_type_and_consts in
+      LGWF.gen_wf_predicates inlined_ctx adt_map const_inlined_type_and_consts
+      @ node_contract_src
+    in
 
     (* Step 7. Dependency analysis on nodes and contracts *)
     let* (sorted_node_contract_decls, toplevel_nodes, scc_map, node_summary) =
@@ -393,9 +403,21 @@ let of_channel only_parse in_ch =
             match LustreNode.get_main_annotated_nodes nodes with
             | (_ :: _ as node_names) -> node_names
             | [] ->
-              match toplevel_nodes with
+            let generated =
+              List.filter_map
+                (fun { LN.node_id } ->
+                  if NI.get_node_type node_id = NI.WellFormedness
+                  then Some (NI.get_internal_name node_id)
+                  else None)
+                nodes
+            in
+            match
+              List.filter
+                (fun s -> not (List.exists (HString.equal s) generated))
+                toplevel_nodes
+            with
               | [] -> raise (NoMainNode "No node defined in input model")
-              | _ -> toplevel_nodes |> List.map (fun s -> NI.mk_node_id s)
+              | tops -> tops |> List.map (fun s -> NI.mk_node_id s)
           )
           | _ -> []
         )
