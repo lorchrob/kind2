@@ -1006,3 +1006,37 @@ let _ = run_test_tt_main ("frontend LustreDesugarFrameBlocks and LustreDesugarIf
     | Error (`LustreDesugarIfBlocksError (_, MissingDefinitionInBranchError _)) -> true
     | _ -> false);
 ])
+
+(* *************************************************************************** *)
+(*                   Lustre Check Match Expressions Checks                     *)
+(* *************************************************************************** *)
+let _ = run_test_tt_main ("frontend LustreCheckMatchExpressions error tests" >::: [
+  mk_test "test non-exhaustive match" (fun () ->
+    match load_file "./lustreCheckMatchExpressions/non_exhaustive.lus" with
+    | Error (`LustreCheckMatchExpressionsError (_, IncompletePatternMatch)) -> true
+    | _ -> false);
+  mk_test "test non-exhaustive match with nested patterns in contract" (fun () ->
+    match load_file "./lustreCheckMatchExpressions/non_exhaustive_nested.lus" with
+    | Error (`LustreCheckMatchExpressionsError (_, IncompletePatternMatch)) -> true
+    | _ -> false);
+  mk_test "test non-exhaustive match on polymorphic datatype" (fun () ->
+    match load_file "./lustreCheckMatchExpressions/non_exhaustive_polymorphic.lus" with
+    | Error (`LustreCheckMatchExpressionsError (_, IncompletePatternMatch)) -> true
+    | _ -> false);
+  mk_test "test non-exhaustive match in refinement type" (fun () ->
+    match load_file "./lustreCheckMatchExpressions/non_exhaustive_in_refinement_type.lus" with
+    | Error (`LustreCheckMatchExpressionsError (_, IncompletePatternMatch)) -> true
+    | _ -> false);
+  mk_test "test redundant pattern after wildcard" (fun () ->
+    match load_file "./lustreCheckMatchExpressions/redundant_after_wildcard.lus" with
+    | Error (`LustreCheckMatchExpressionsError (_, RedundantPattern _)) -> true
+    | _ -> false);
+  mk_test "test redundant pattern subsumed by earlier arms" (fun () ->
+    match load_file "./lustreCheckMatchExpressions/redundant_nested.lus" with
+    | Error (`LustreCheckMatchExpressionsError (_, RedundantPattern _)) -> true
+    | _ -> false);
+  mk_test "test match with no recorded scrutinee type is skipped" (fun () ->
+    match load_file "./lustreCheckMatchExpressions/unannotated_match_in_type_is_skipped.lus" with
+    | Ok _ -> true
+    | _ -> false);
+])

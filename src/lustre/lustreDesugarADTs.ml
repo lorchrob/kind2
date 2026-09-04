@@ -219,9 +219,10 @@ let desugar_arm pos ctx adt_map info scrut pat body =
 let rec build_ite pos arms =
   match arms with
   | [] -> assert false
-  (* More cases after a catch-all; will be caught in later PR by redundancy checks *)
+  (* A catch-all arm is always last: any arm following it is useless, which
+     LustreCheckMatchExpressions rejects *)
   | (None, _) :: _ :: _ -> assert false 
-  (* Last case must always cover all cases so far uncovered (problems here will be caught by later PR's exhaustiveness checks) *)
+  (* The match is exhaustive, so the last arm covers everything left uncovered *)
   | [(_, body)] -> body 
   | (Some cond, body) :: rest ->
     LA.TernaryOp (pos, LA.LazyIte, cond, body, build_ite pos rest)
